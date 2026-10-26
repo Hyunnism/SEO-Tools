@@ -30,8 +30,8 @@ flowchart LR
 
 | Fase | Estimasi | Status | Gate lulus (tanggal / commit) |
 |---|---|---|---|
-| 0 Fondasi | 0,5 hari | ✅ | 2026-10-26 / lihat `git log` |
-| 1A Auth & Doctor | 1 hari | ⬜ | |
+| 0 Fondasi | 0,5 hari | ✅ | 2026-10-26 / cf3dbbe |
+| 1A Auth & Doctor | 1 hari | ✅ | 2026-10-26 / lihat `git log` |
 | 1B Discovery & Crawl | 2 hari | ⬜ | |
 | 1C Inspect & Perf | 1–2 hari | ⬜ | |
 | 1D Analyze, Store, Report | 1–2 hari | ⬜ | |
@@ -94,21 +94,21 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 0 lulus.
 
 **Task**
-- [ ] `google.go`: JWT RS256 + token cache per scope (9.1)
-- [ ] `doJSON`: Bearer, retry exponential backoff + jitter untuk 429/5xx (maks 4x), hormati `Retry-After`
-- [ ] `doctor`: cek `sites.list`, format `gsc_property`, izin tiap properti, versi Go
+- [x] `google.go` (`internal/google/google.go`): JWT RS256 + token cache per scope (9.1)
+- [x] `doJSON`: Bearer, retry exponential backoff + jitter untuk 429/5xx (maks 4x), hormati `Retry-After`, sanitasi log
+- [x] `doctor`: cek `sites.list`, format `gsc_property`, izin tiap properti, versi Go
 
 **Test**
-- [ ] JWT: header/claim benar, tanda tangan terverifikasi dengan public key dari RSA key sementara
-- [ ] Cache token: tidak request ulang sebelum 60 detik menjelang expire; refresh sesudahnya
-- [ ] `doJSON` terhadap `httptest`: retry pada 429/5xx, berhenti setelah 4x, `Retry-After` dipatuhi, 4xx lain tidak di-retry
-- [ ] **Header `Authorization` dan token tidak muncul di log** (tangkap output `slog`)
-- [ ] `doctor`: properti tidak ada di `sites.list` → pesan jelas; properti ada → OK
-- [ ] `-race` pada akses cache token bersamaan
+- [x] JWT: header/claim benar, tanda tangan terverifikasi dengan public key dari RSA key sementara
+- [x] Cache token: tidak request ulang sebelum 60 detik menjelang expire; refresh sesudahnya
+- [x] `doJSON` terhadap `httptest`: retry pada 429/5xx, berhenti setelah 4x, `Retry-After` dipatuhi, 4xx lain tidak di-retry
+- [x] **Header `Authorization` dan token tidak muncul di log** (tangkap output `slog`)
+- [x] `doctor`: properti tidak ada di `sites.list` → pesan jelas; properti ada → OK
+- [x] `-race` pada akses cache token bersamaan
 
-**Verifikasi:** Gate Standar. Manual opsional: `seo-boost doctor` dengan `sa.json` asli.
-**Definition of Done:** `doctor` melaporkan akses semua properti dengan benar terhadap mock.
-**Gate lulus:** [ ] ______
+**Verifikasi:** `.\scripts\gate.ps1 -race` + uji `seo-boost doctor` dengan `secrets/sa.json` asli.
+**Definition of Done:** `doctor` melaporkan akses semua properti dengan benar terhadap mock dan API Google sungguhan.
+**Gate lulus:** [x] 2026-10-26 (build, vet, unit tests, dan -race detector 100% passed)
 
 ---
 
