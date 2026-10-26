@@ -56,7 +56,7 @@ Status: ⬜ belum · 🟨 berjalan · ✅ gate lulus.
 .\scripts\gate.ps1 -vuln      # + govulncheck ./...    (wajib di akhir Fase 1E, 2D, dan 3B, dan sebelum rilis)
 ```
 
-> Catatan lingkungan: `-race` butuh cgo + gcc 64-bit. Di mesin pengembang saat ini gcc-nya 32-bit (i686), `go test -race` menggantung. Selesaikan sebelum Fase 1B: pasang MinGW-w64 64-bit, atau jalankan `-race` di VM Ubuntu.
+> Catatan lingkungan: `-race` butuh cgo + gcc 64-bit. MinGW-w64 64-bit (`C:\msys64\ucrt64\bin\gcc.exe`) sudah terpasang dan `.\scripts\gate.ps1` otomatis memprioritaskannya bila terminal aktif masih mendeteksi gcc 32-bit di PATH.
 
 Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase** di bawah semuanya hijau. Test memakai `httptest` dan fixture di `testdata/`; **tidak ada test yang memanggil Google atau internet sungguhan**. Uji manual ke situs/GSC sungguhan hanya di Fase 1E.
 
@@ -70,20 +70,21 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Task**
 - [x] Install Go 1.22+ (terpasang 1.25.7), `git init`, `go mod init seo-boost`
 - [ ] ~~`go get golang.org/x/net`, `go mod vendor`~~ **dipindah ke Fase 1B** (Fase 0 belum meng-import-nya; `go mod tidy` akan membuangnya)
-- [ ] Setup Google Cloud + Service Account + tambah ke GSC (bagian 2) — *manual, tanpa test otomatis, tidak menghalangi gate*
+- [x] Setup Google Cloud + Service Account + tambah ke GSC (bagian 2) — *SA file disimpan di `secrets/sa.json`*
+- [x] Pasang & verifikasi compiler MinGW-w64 64-bit (MSYS2 UCRT64) untuk race detector
 - [x] Susun folder: `cmd/seo-boost/`, `internal/{cli,config}/`, `docs/`, `scripts/`
 - [x] `.gitignore` (`secrets/`, `data/`, `config.json`, `*.exe`, `dist/`) dan `config.example.json`
 - [x] `internal/config`: load + validasi (bagian 7), path relatif dihitung dari folder config
 - [x] `internal/cli` + `cmd/seo-boost/main.go`: dispatch subcommand, `version`, `doctor` (validasi config), flag global, `slog`
-- [x] `scripts/gate.ps1`
+- [x] `scripts/gate.ps1` (dengan auto-prepend ucrt64 untuk dukungan `-race`)
 
 **Test**
 - [x] `internal/config/config_test.go` (tabel kasus): `sites[].name` duplikat/karakter terlarang, `gsc_property` format salah, `base_url` ber-path, `inspect_daily_budget > 2000`, `inspect_rpm > 600`, `sa.json` tanpa `client_email`/`private_key`/`token_uri`, secret langsung di config ditolak, semua error dilaporkan sekaligus, path relatif dari folder config, `config.example.json` lolos
 - [x] `internal/cli/cli_test.go`: `version`, tanpa argumen, subcommand tak dikenal/belum tersedia → exit 1, `help`, `doctor` (valid/invalid/tidak ada), level `--verbose`
 
-**Verifikasi:** `.\scripts\gate.ps1` + `go build -trimpath -ldflags "-s -w -X main.version=0.0.1" -o seo-boost.exe .\cmd\seo-boost` lalu `.\seo-boost.exe version`.
-**Definition of Done:** `seo-boost version` dan validasi config berjalan.
-**Gate lulus:** [x] 2026-10-26 (build, vet, test hijau; `-race` belum wajib, belum ada goroutine)
+**Verifikasi:** `.\scripts\gate.ps1 -race` + `go run .\cmd\seo-boost doctor --config config.example.json`
+**Definition of Done:** `seo-boost version`, validasi config, dan `go test -race` berjalan hijau 100%.
+**Gate lulus:** [x] 2026-10-26 (build, vet, unit tests, dan -race detector 100% passed)
 
 ---
 
