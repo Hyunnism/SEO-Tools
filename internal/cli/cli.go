@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -8,12 +9,17 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"seo-boost/internal/config"
+	"seo-boost/internal/crawl"
 	"seo-boost/internal/google"
+	"seo-boost/internal/sitemap"
 )
 
 const usage = `seo-boost - SEO automation tool
@@ -23,6 +29,8 @@ Pemakaian: seo-boost <perintah> [flag]
 Perintah tersedia:
   version   tampilkan versi
   doctor    periksa konfigurasi, kredensial, dan izin properti GSC
+  discover  temukan URL situs dari sitemap dan spider BFS internal
+  crawl     rayapi halaman web dan audit on-page SEO
   help      tampilkan bantuan ini
 
 Flag global: --config --site --format --out --verbose
@@ -70,7 +78,11 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return 0
 	case "doctor":
 		return doctor(rest, stdout, stderr)
-	case "discover", "crawl", "inspect", "perf", "gap", "submit", "run", "report", "serve", "indexnow-key":
+	case "discover":
+		return discover(rest, stdout, stderr)
+	case "crawl":
+		return crawlCmd(rest, stdout, stderr)
+	case "inspect", "perf", "gap", "submit", "run", "report", "serve", "indexnow-key":
 		fmt.Fprintf(stderr, "perintah %q belum tersedia\n", cmd)
 		return 1
 	default:
@@ -208,4 +220,356 @@ func checkGoVersion(ver string) error {
 		return fmt.Errorf("versi Go saat ini adalah %s, minimal membutuhkan Go 1.22+", ver)
 	}
 	return nil
+}
+
+func resolveSite(cfg *config.Config, siteName string) (*config.Site, error) {
+	if len(cfg.Sites) == 0 {
+		return nil, errors.New("tidak ada site terdaftar di config")
+	}
+	if siteName == "" {
+		if len(cfg.Sites) == 1 {
+			return &cfg.Sites[0], nil
+		}
+		var names []string
+		for _, s := range cfg.Sites {
+			names = append(names, s.Name)
+		}
+		return nil, fmt.Errorf("parameter --site harus ditentukan karena ada lebih dari 1 site: [%s]", strings.Join(names, ", "))
+	}
+	for i := range cfg.Sites {
+		if cfg.Sites[i].Name == siteName {
+			return &cfg.Sites[i], nil
+		}
+	}
+	return nil, fmt.Errorf("site %q tidak ditemukan di config", siteName)
+}
+
+func discover(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("discover", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	g := globalFlags(fs)
+	spider := false
+	maxPages := 100
+	fs.BoolVar(&spider, "spider", false, "jalankan spider internal BFS untuk mendeteksi orphan/unlinked URL")
+	fs.IntVar(&maxPages, "max-pages", 100, "batas maksimal halaman yang dikumpulkan")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 1
+	}
+
+	log := newLogger(stderr, g.verbose)
+	c, err := config.Load(g.config)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Muat config: %v\n", err)
+		return 1
+	}
+
+	site, err := resolveSite(c, g.site)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] %v\n", err)
+		return 1
+	}
+
+	ctx := context.Background()
+	hc := defaultHTTPClient
+	if hc == nil {
+		hc = &http.Client{Timeout: 30 * time.Second}
+	}
+
+	// 1. Tentukan URL sitemap (dari config atau auto-discover)
+	var sitemapURLs []string
+	if len(site.Sitemaps) > 0 {
+		sitemapURLs = append(sitemapURLs, site.Sitemaps...)
+	} else {
+		log.Debug("mencari sitemap otomatis dari robots.txt / fallback", "baseURL", site.BaseURL)
+		discoveredSitemaps, err := sitemap.AutoDiscover(ctx, hc, site.BaseURL)
+		if err != nil {
+			log.Debug("auto-discover sitemap tidak menemukan hasil", "err", err)
+		} else {
+			sitemapURLs = append(sitemapURLs, discoveredSitemaps...)
+		}
+	}
+
+	// 2. Fetch URLs dari sitemap
+	sitemapURLsMap := make(map[string]bool)
+	var sitemapList []string
+	for _, sm := range sitemapURLs {
+		urls, err := sitemap.FetchAndParse(ctx, hc, sm, site.BaseURL, site.ExcludePaths, maxPages)
+		if err != nil {
+			fmt.Fprintf(stderr, "[PERINGATAN] Gagal parse sitemap %s: %v\n", sm, err)
+			continue
+		}
+		for _, u := range urls {
+			if !sitemapURLsMap[u] {
+				sitemapURLsMap[u] = true
+				sitemapList = append(sitemapList, u)
+			}
+		}
+	}
+
+	// 3. Jika --spider aktif, jalankan spider BFS
+	spiderURLsMap := make(map[string]bool)
+	var spiderList []string
+	if spider {
+		log.Debug("menjalankan internal spider BFS...", "baseURL", site.BaseURL, "maxPages", maxPages)
+		spURLs, err := crawl.SpiderBFS(ctx, hc, site.BaseURL, "seo-boost/1.0", maxPages)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			fmt.Fprintf(stderr, "[PERINGATAN] Spider gagal: %v\n", err)
+		}
+		for _, u := range spURLs {
+			if !spiderURLsMap[u] {
+				spiderURLsMap[u] = true
+				spiderList = append(spiderList, u)
+			}
+		}
+	}
+
+	// Gabungkan dan hitung statistik
+	allURLsMap := make(map[string]bool)
+	for u := range sitemapURLsMap {
+		allURLsMap[u] = true
+	}
+	for u := range spiderURLsMap {
+		allURLsMap[u] = true
+	}
+
+	var allURLs []string
+	for u := range allURLsMap {
+		allURLs = append(allURLs, u)
+	}
+	sort.Strings(allURLs)
+
+	// Format output
+	var outBuf bytes.Buffer
+	fmt.Fprintf(&outBuf, "=== Discovery Report untuk %s (%s) ===\n", site.Name, site.BaseURL)
+	fmt.Fprintf(&outBuf, "Sitemap URLs: %d\n", len(sitemapList))
+	if spider {
+		fmt.Fprintf(&outBuf, "Spider URLs:  %d\n", len(spiderList))
+		var orphanInSpider []string
+		for _, u := range spiderList {
+			if !sitemapURLsMap[u] {
+				orphanInSpider = append(orphanInSpider, u)
+			}
+		}
+		var orphanInSitemap []string
+		for _, u := range sitemapList {
+			if !spiderURLsMap[u] {
+				orphanInSitemap = append(orphanInSitemap, u)
+			}
+		}
+		fmt.Fprintf(&outBuf, "URLs di spider tapi TIDAK di sitemap: %d\n", len(orphanInSpider))
+		fmt.Fprintf(&outBuf, "URLs di sitemap tapi TIDAK terhubung link internal: %d\n", len(orphanInSitemap))
+	}
+	fmt.Fprintf(&outBuf, "Total Unik URLs: %d\n\n", len(allURLs))
+
+	for i, u := range allURLs {
+		tag := "[SITEMAP]"
+		if spider {
+			inSM := sitemapURLsMap[u]
+			inSP := spiderURLsMap[u]
+			if inSM && inSP {
+				tag = "[BOTH]   "
+			} else if inSM {
+				tag = "[SITEMAP]"
+			} else {
+				tag = "[SPIDER] "
+			}
+		}
+		fmt.Fprintf(&outBuf, "%3d. %s %s\n", i+1, tag, u)
+	}
+
+	resultStr := outBuf.String()
+	fmt.Fprint(stdout, resultStr)
+
+	if g.out != "" {
+		if err := os.WriteFile(g.out, []byte(resultStr), 0o644); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Tulis file output %s: %v\n", g.out, err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "\nLaporan tersimpan di: %s\n", g.out)
+	}
+
+	return 0
+}
+
+func crawlCmd(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("crawl", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	g := globalFlags(fs)
+	spider := true
+	concurrency := 0
+	maxPages := 100
+	timeoutSec := 20
+	fs.BoolVar(&spider, "spider", true, "sertakan internal spider BFS untuk melengkapi sitemap")
+	fs.IntVar(&concurrency, "concurrency", 0, "jumlah worker paralel (default mengikuti config atau 5)")
+	fs.IntVar(&maxPages, "max-pages", 100, "maksimal halaman yang dirayapi")
+	fs.IntVar(&timeoutSec, "timeout", 20, "timeout HTTP request per halaman dalam detik")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 1
+	}
+
+	log := newLogger(stderr, g.verbose)
+	c, err := config.Load(g.config)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Muat config: %v\n", err)
+		return 1
+	}
+
+	site, err := resolveSite(c, g.site)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] %v\n", err)
+		return 1
+	}
+
+	if concurrency <= 0 {
+		if c.Defaults.CrawlConcurrency > 0 {
+			concurrency = c.Defaults.CrawlConcurrency
+		} else {
+			concurrency = 5
+		}
+	}
+
+	ctx := context.Background()
+	hc := defaultHTTPClient
+	if hc == nil {
+		hc = &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
+	}
+
+	// 1. Kumpulkan daftar URL (dari sitemap + spider opsional)
+	sitemapURLsMap := make(map[string]bool)
+	allURLsMap := make(map[string]bool)
+
+	var sitemaps []string
+	if len(site.Sitemaps) > 0 {
+		sitemaps = append(sitemaps, site.Sitemaps...)
+	} else {
+		discovered, _ := sitemap.AutoDiscover(ctx, hc, site.BaseURL)
+		sitemaps = append(sitemaps, discovered...)
+	}
+
+	for _, sm := range sitemaps {
+		urls, err := sitemap.FetchAndParse(ctx, hc, sm, site.BaseURL, site.ExcludePaths, maxPages)
+		if err == nil {
+			for _, u := range urls {
+				sitemapURLsMap[u] = true
+				allURLsMap[u] = true
+			}
+		}
+	}
+
+	if spider || len(allURLsMap) == 0 {
+		spURLs, err := crawl.SpiderBFS(ctx, hc, site.BaseURL, "seo-boost/1.0", maxPages)
+		if err == nil {
+			for _, u := range spURLs {
+				allURLsMap[u] = true
+			}
+		}
+	}
+
+	var targetURLs []string
+	for u := range allURLsMap {
+		targetURLs = append(targetURLs, u)
+		if maxPages > 0 && len(targetURLs) >= maxPages {
+			break
+		}
+	}
+	sort.Strings(targetURLs)
+
+	if len(targetURLs) == 0 {
+		fmt.Fprintf(stderr, "[PERINGATAN] Tidak ada URL yang ditemukan untuk dirayapi pada site %s\n", site.Name)
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "Memulai crawling %d halaman pada %s (concurrency=%d)...\n", len(targetURLs), site.BaseURL, concurrency)
+
+	crawler := crawl.NewCrawler(crawl.Config{
+		UserAgent:   "seo-boost/1.0",
+		Concurrency: concurrency,
+		TimeoutS:    timeoutSec,
+		BaseURL:     site.BaseURL,
+	}, hc)
+
+	pages, err := crawler.CrawlPages(ctx, targetURLs, sitemapURLsMap)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Crawling error: %v\n", err)
+		return 1
+	}
+
+	// Ringkasan hasil crawl
+	var outBuf bytes.Buffer
+	fmt.Fprintf(&outBuf, "\n=== Hasil Crawl & On-Page Audit (%s) ===\n", site.Name)
+	fmt.Fprintf(&outBuf, "Total Halaman Dirayapi: %d\n", len(pages))
+
+	statusCounts := make(map[int]int)
+	totalIssues := 0
+	critCount := 0
+	warnCount := 0
+	infoCount := 0
+
+	for _, p := range pages {
+		if p.Crawl != nil {
+			statusCounts[p.Crawl.HTTPStatus]++
+		}
+		for _, issue := range p.Audit {
+			totalIssues++
+			switch issue.Severity {
+			case "error":
+				critCount++
+			case "warn":
+				warnCount++
+			case "info":
+				infoCount++
+			}
+		}
+	}
+
+	fmt.Fprintf(&outBuf, "Status Breakdown: ")
+	for st, count := range statusCounts {
+		fmt.Fprintf(&outBuf, "%d: %d  ", st, count)
+	}
+	fmt.Fprintf(&outBuf, "\nTotal Isu Audit: %d (Error: %d, Warning: %d, Info: %d)\n\n",
+		totalIssues, critCount, warnCount, infoCount)
+
+	for i, p := range pages {
+		st := 0
+		title := "(tanpa title)"
+		words := 0
+		if p.Crawl != nil {
+			st = p.Crawl.HTTPStatus
+			if p.Crawl.Title != "" {
+				title = p.Crawl.Title
+			}
+			words = p.Crawl.WordCount
+		}
+
+		fmt.Fprintf(&outBuf, "%2d. [%d] %s (words: %d, links in: %d)\n    URL: %s\n",
+			i+1, st, title, words, p.InternalIn, p.URL)
+
+		if len(p.Audit) > 0 {
+			for _, iss := range p.Audit {
+				fmt.Fprintf(&outBuf, "    - [%s] %s: %s\n", strings.ToUpper(iss.Severity), iss.Code, iss.Detail)
+			}
+		}
+	}
+
+	resultStr := outBuf.String()
+	fmt.Fprint(stdout, resultStr)
+
+	if g.out != "" {
+		if err := os.WriteFile(g.out, []byte(resultStr), 0o644); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Tulis file output %s: %v\n", g.out, err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "\nLaporan tersimpan di: %s\n", g.out)
+	}
+
+	_ = log
+	return 0
 }

@@ -1,3 +1,5 @@
 module seo-boost
 
-go 1.25.7
+go 1.26.0
+
+require golang.org/x/net v0.61.0

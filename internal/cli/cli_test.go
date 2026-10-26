@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"seo-boost/internal/config"
 	"seo-boost/internal/google"
 )
 
@@ -60,7 +61,7 @@ func TestUnknownCommand(t *testing.T) {
 }
 
 func TestNotYetAvailable(t *testing.T) {
-	code, _, errs := run("crawl")
+	code, _, errs := run("inspect")
 	if code != 1 || !strings.Contains(errs, "belum tersedia") {
 		t.Fatalf("code=%d err=%q", code, errs)
 	}
@@ -190,5 +191,114 @@ func TestVerboseLogger(t *testing.T) {
 	}
 	if !newLogger(&b, true).Enabled(nil, slog.LevelDebug) {
 		t.Fatal("debug harus nyala dengan --verbose")
+	}
+}
+
+func TestDiscoverAndCrawlCmd(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/robots.txt":
+			fmt.Fprintln(w, "User-agent: *")
+			fmt.Fprintf(w, "Sitemap: http://%s/sitemap.xml\n", r.Host)
+		case "/sitemap.xml":
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+	<url><loc>http://%s/</loc></url>
+	<url><loc>http://%s/about</loc></url>
+</urlset>`, r.Host, r.Host)
+		case "/":
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>Home Page</title><meta name="description" content="Welcome to homepage"></head><body><h1>Main Title</h1><p>Welcome to our site</p><a href="/about">About</a><a href="/orphan">Orphan</a></body></html>`)
+		case "/about":
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>About Us</title><meta name="description" content="About us page"></head><body><h1>About Us</h1><p>Our company details.</p></body></html>`)
+		case "/orphan":
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>Orphan Page</title></head><body><h1>Orphan</h1><p>Not in sitemap</p></body></html>`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	defaultHTTPClient = ts.Client()
+	defer func() { defaultHTTPClient = nil }()
+
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "sa.json"), []byte(`{"client_email":"a@b.com","private_key":"k","token_uri":"https://oauth2.googleapis.com/token"}`), 0o600)
+	cfgContent := fmt.Sprintf(`{
+		"service_account_file": "./sa.json",
+		"sites": [
+			{
+				"name": "mocksite",
+				"base_url": "%s",
+				"gsc_property": "%s/"
+			}
+		]
+	}`, ts.URL, ts.URL)
+	cfgPath := filepath.Join(dir, "config.json")
+	_ = os.WriteFile(cfgPath, []byte(cfgContent), 0o600)
+
+	// Test discover tanpa spider
+	code, out, errs := run("discover", "--config", cfgPath)
+	if code != 0 {
+		t.Fatalf("discover failed code=%d out=%s err=%s", code, out, errs)
+	}
+	if !strings.Contains(out, "Sitemap URLs: 2") {
+		t.Errorf("expected 2 sitemap URLs, got: %s", out)
+	}
+
+	// Test discover dengan --spider
+	code, out, _ = run("discover", "--config", cfgPath, "--spider")
+	if code != 0 {
+		t.Fatalf("discover with spider failed code=%d out=%s", code, out)
+	}
+	if !strings.Contains(out, "Spider URLs:") || !strings.Contains(out, "TIDAK di sitemap") {
+		t.Errorf("expected spider results, got: %s", out)
+	}
+
+	// Test crawl
+	code, out, errs = run("crawl", "--config", cfgPath, "--concurrency", "2")
+	if code != 0 {
+		t.Fatalf("crawl failed code=%d err=%s out=%s", code, errs, out)
+	}
+	if !strings.Contains(out, "=== Hasil Crawl & On-Page Audit") {
+		t.Errorf("crawl output invalid: %s", out)
+	}
+	if !strings.Contains(out, "Total Halaman Dirayapi:") {
+		t.Errorf("crawl missing total pages: %s", out)
+	}
+}
+
+func TestResolveSite(t *testing.T) {
+	// 1. Config kosong
+	cfgEmpty := &config.Config{Sites: nil}
+	if _, err := resolveSite(cfgEmpty, ""); err == nil {
+		t.Error("expected error on empty sites")
+	}
+
+	// 2. Satu site, tanpa argumen
+	cfgSingle := &config.Config{Sites: []config.Site{{Name: "mysite"}}}
+	s, err := resolveSite(cfgSingle, "")
+	if err != nil || s.Name != "mysite" {
+		t.Errorf("failed resolving single site: %v, %v", s, err)
+	}
+
+	// 3. Banyak site, tanpa argumen -> harus error
+	cfgMulti := &config.Config{Sites: []config.Site{{Name: "s1"}, {Name: "s2"}}}
+	if _, err := resolveSite(cfgMulti, ""); err == nil {
+		t.Error("expected error when multiple sites exist without --site flag")
+	}
+
+	// 4. Banyak site, dengan argumen cocok
+	s, err = resolveSite(cfgMulti, "s2")
+	if err != nil || s.Name != "s2" {
+		t.Errorf("failed resolving s2: %v, %v", s, err)
+	}
+
+	// 5. Banyak site, nama tidak ditemukan
+	if _, err := resolveSite(cfgMulti, "s3"); err == nil {
+		t.Error("expected error for nonexistent site")
 	}
 }

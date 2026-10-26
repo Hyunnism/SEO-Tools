@@ -118,27 +118,27 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 1A lulus (hanya untuk `doJSON`/struktur umum; modul ini tidak memanggil Google).
 
 **Task**
-- [ ] `go get golang.org/x/net` + `go mod vendor` (dipindah dari Fase 0; dilakukan bersamaan dengan `internal/extract` yang meng-import-nya)
-- [ ] `sitemap.go`: parse urlset, sitemap index (rekursif maks 3), `.gz`, auto-discovery (`robots.txt`, `/sitemap.xml`) (9.2)
-- [ ] Normalisasi URL, filter host, `exclude_paths`, batas 50.000 URL
-- [ ] `crawl.go`: worker pool, delay, timeout, redirect maks 5, `LimitReader`, retry 1x, spider BFS + robots.txt (9.3)
-- [ ] `extract.go`: title, meta, canonical, robots meta, H1–H3, body, alt, JSON-LD, link (`x/net/html`) (9.3.1)
-- [ ] Deteksi `ThinHTML`, hitung `InternalIn`, selisih sitemap vs link internal
-- [ ] Audit on-page (9.3.2), ambang di satu tempat
+- [x] `go get golang.org/x/net` + `go mod vendor` (dipindah dari Fase 0; dilakukan bersamaan dengan `internal/extract` yang meng-import-nya)
+- [x] `sitemap.go`: parse urlset, sitemap index (rekursif maks 3), `.gz`, auto-discovery (`robots.txt`, `/sitemap.xml`) (9.2)
+- [x] Normalisasi URL, filter host, `exclude_paths`, batas 50.000 URL
+- [x] `crawl.go`: worker pool, delay, timeout, redirect maks 5, `LimitReader`, retry 1x, spider BFS + robots.txt (9.3)
+- [x] `extract.go`: title, meta, canonical, robots meta, H1–H3, body, alt, JSON-LD, link (`x/net/html`) (9.3.1)
+- [x] Deteksi `ThinHTML`, hitung `InternalIn`, selisih sitemap vs link internal
+- [x] Audit on-page (9.3.2), ambang di satu tempat
 
 **Test**
-- [ ] Sitemap: urlset, index bertingkat, `.gz`, kedalaman > 3 dihentikan, dekompresi melebihi batas ditolak
-- [ ] Normalisasi URL: fragment, `:80/:443`, huruf besar host, trailing slash, host berbeda dibuang
-- [ ] Ekstraksi dari fixture HTML: normal, rusak/tidak tertutup, atribut multi-baris, `<script>/<style>/<noscript>` dilewati
-- [ ] Crawler terhadap `httptest`: 200, 404, 5xx (retry 1x), redirect loop (berhenti di 5), timeout lambat, body > batas, `Content-Type` non-HTML
-- [ ] Spider menghormati `robots.txt` dan tidak keluar dari host
-- [ ] Satu aturan audit = satu test (semua kode di tabel 9.3.2, termasuk `orphan_page` dan duplikat)
-- [ ] `ThinHTML` true untuk fixture SPA, false untuk halaman biasa
-- [ ] `-race` pada worker pool
+- [x] Sitemap: urlset, index bertingkat, `.gz`, kedalaman > 3 dihentikan, dekompresi melebihi batas ditolak
+- [x] Normalisasi URL: fragment, `:80/:443`, huruf besar host, trailing slash, host berbeda dibuang
+- [x] Ekstraksi dari fixture HTML: normal, rusak/tidak tertutup, atribut multi-baris, `<script>/<style>/<noscript>` dilewati
+- [x] Crawler terhadap `httptest`: 200, 404, 5xx (retry 1x), redirect loop (berhenti di 5), timeout lambat, body > batas, `Content-Type` non-HTML
+- [x] Spider menghormati `robots.txt` dan tidak keluar dari host
+- [x] Satu aturan audit = satu test (semua kode di tabel 9.3.2, termasuk `orphan_page` dan duplikat)
+- [x] `ThinHTML` true untuk fixture SPA, false untuk halaman biasa
+- [x] `-race` pada worker pool
 
-**Verifikasi:** Gate Standar.
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + uji `seo-boost discover` dan `seo-boost crawl` terhadap live site (`awanverse`).
 **Definition of Done:** `discover` dan `crawl` terhadap situs uji lokal menghasilkan daftar URL + audit yang benar.
-**Gate lulus:** [ ] ______
+**Gate lulus:** [x] 2026-10-27 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live site awanverse sukses)
 
 ---
 
