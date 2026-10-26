@@ -1,0 +1,6 @@
+$ErrorActionPreference = "Stop"
+go build ./...
+go vet ./...
+go test ./... -count=1
+if ($args -contains "-race") { go test -race ./... }
+if ($args -contains "-vuln") { govulncheck ./... }

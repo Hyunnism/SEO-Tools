@@ -1,0 +1,35 @@
+{
+  "service_account_file": "./secrets/sa.json",
+  "data_dir": "./data",
+
+  "defaults": {
+    "user_agent": "seo-boost/1.0 (owner-tool; +https://example.com/about)",
+    "crawl_concurrency": 5,
+    "crawl_delay_ms": 200,
+    "crawl_timeout_s": 20,
+    "max_pages": 5000,
+    "inspect_rpm": 300,
+    "inspect_daily_budget": 1800,
+    "reinspect_after_days": 7,
+    "perf_days": 28,
+    "stopwords": ["id", "en"]
+  },
+
+  "sites": [
+    {
+      "name": "portfolio",
+      "gsc_property": "sc-domain:example.com",
+      "base_url": "https://example.com",
+      "sitemaps": ["https://example.com/sitemap.xml"],
+      "exclude_paths": ["/admin", "/tag/", "/search"],
+      "priority_paths": ["/", "/blog/"],
+      "indexnow_key": ""
+    }
+  ],
+
+  "notify": {
+    "telegram_token_env": "SEOBOOST_TG_TOKEN",
+    "telegram_chat_id": "",
+    "discord_webhook_env": "SEOBOOST_DISCORD"
+  }
+}
