@@ -31,8 +31,8 @@ flowchart LR
 | Fase | Estimasi | Status | Gate lulus (tanggal / commit) |
 |---|---|---|---|
 | 0 Fondasi | 0,5 hari | ✅ | 2026-10-26 / cf3dbbe |
-| 1A Auth & Doctor | 1 hari | ✅ | 2026-10-26 / lihat `git log` |
-| 1B Discovery & Crawl | 2 hari | ⬜ | |
+| 1A Auth & Doctor | 1 hari | ✅ | 2026-10-26 / 61dd9c7 |
+| 1B Discovery & Crawl | 2 hari | ✅ | 2026-10-27 / 3154920 |
 | 1C Inspect & Perf | 1–2 hari | ⬜ | |
 | 1D Analyze, Store, Report | 1–2 hari | ⬜ | |
 | 1E Integrasi MVP | 0,5–1 hari | ⬜ | |
