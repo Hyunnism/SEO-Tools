@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-if ((Test-Path "C:\msys64\ucrt64\bin\gcc.exe") -and ($env:PATH -notlike "*C:\msys64\ucrt64\bin*")) {
+if (Test-Path "C:\msys64\ucrt64\bin\gcc.exe") {
     $env:PATH = "C:\msys64\ucrt64\bin;" + $env:PATH
 }
 go build ./...

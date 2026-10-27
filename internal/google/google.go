@@ -389,3 +389,124 @@ func (c *Client) ListSites(ctx context.Context) ([]SiteEntry, error) {
 	}
 	return resp.SiteEntry, nil
 }
+
+type inspectURLRequest struct {
+	SiteURL       string `json:"siteUrl"`
+	InspectionURL string `json:"inspectionUrl"`
+	LanguageCode  string `json:"languageCode"`
+}
+
+// IndexStatusResult mewakili bagian indexStatusResult dari respons GSC URL Inspection.
+type IndexStatusResult struct {
+	Verdict         string `json:"verdict"`
+	CoverageState   string `json:"coverageState"`
+	RobotsTxtState  string `json:"robotsTxtState"`
+	IndexingState   string `json:"indexingState"`
+	LastCrawlTime   string `json:"lastCrawlTime"`
+	PageFetchState  string `json:"pageFetchState"`
+	GoogleCanonical string `json:"googleCanonical"`
+	UserCanonical   string `json:"userCanonical"`
+	CrawledAs       string `json:"crawledAs"`
+}
+
+type inspectURLResponse struct {
+	InspectionResult struct {
+		InspectionURL     string             `json:"inspectionUrl"`
+		IndexStatusResult *IndexStatusResult `json:"indexStatusResult"`
+	} `json:"inspectionResult"`
+}
+
+// InspectURL memanggil Google URL Inspection API untuk memeriksa status crawl dan index suatu URL.
+func (c *Client) InspectURL(ctx context.Context, siteURL, inspectionURL string) (*IndexStatusResult, error) {
+	endpoint := "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect"
+	reqBody := inspectURLRequest{
+		SiteURL:       siteURL,
+		InspectionURL: inspectionURL,
+		LanguageCode:  "id-ID",
+	}
+	var resp inspectURLResponse
+	if err := c.DoJSON(ctx, http.MethodPost, endpoint, ScopeWebmastersReadonly, reqBody, &resp); err != nil {
+		return nil, err
+	}
+	if resp.InspectionResult.IndexStatusResult == nil {
+		return nil, errors.New("respons GSC urlInspection tidak memuat indexStatusResult")
+	}
+	return resp.InspectionResult.IndexStatusResult, nil
+}
+
+// SearchAnalyticsRow mewakili satu baris data gabungan page dan query dari Search Analytics GSC.
+type SearchAnalyticsRow struct {
+	Keys        []string `json:"keys"`
+	Clicks      float64  `json:"clicks"`
+	Impressions float64  `json:"impressions"`
+	CTR         float64  `json:"ctr"`
+	Position    float64  `json:"position"`
+}
+
+type searchAnalyticsQueryRequest struct {
+	StartDate  string   `json:"startDate"`
+	EndDate    string   `json:"endDate"`
+	Dimensions []string `json:"dimensions"`
+	RowLimit   int      `json:"rowLimit"`
+	StartRow   int      `json:"startRow"`
+	DataState  string   `json:"dataState"`
+}
+
+type searchAnalyticsResponse struct {
+	Rows []SearchAnalyticsRow `json:"rows"`
+}
+
+// QuerySearchAnalytics mengambil metrik performa pencarian GSC dengan paginasi otomatis per 25.000 baris.
+func (c *Client) QuerySearchAnalytics(ctx context.Context, siteURL string, startDate, endDate string, rowLimit int) ([]SearchAnalyticsRow, error) {
+	endpoint := "https://www.googleapis.com/webmasters/v3/sites/" + url.PathEscape(siteURL) + "/searchAnalytics/query"
+	if rowLimit <= 0 {
+		rowLimit = 25000
+	}
+
+	batchSize := 25000
+	if rowLimit < batchSize {
+		batchSize = rowLimit
+	}
+
+	var allRows []SearchAnalyticsRow
+	startRow := 0
+
+	for {
+		reqBody := searchAnalyticsQueryRequest{
+			StartDate:  startDate,
+			EndDate:    endDate,
+			Dimensions: []string{"page", "query"},
+			RowLimit:   batchSize,
+			StartRow:   startRow,
+			DataState:  "final",
+		}
+
+		var resp searchAnalyticsResponse
+		if err := c.DoJSON(ctx, http.MethodPost, endpoint, ScopeWebmastersReadonly, reqBody, &resp); err != nil {
+			return nil, err
+		}
+
+		allRows = append(allRows, resp.Rows...)
+
+		if len(resp.Rows) < batchSize || len(allRows) >= rowLimit {
+			break
+		}
+
+		startRow += len(resp.Rows)
+	}
+
+	if len(allRows) > rowLimit {
+		allRows = allRows[:rowLimit]
+	}
+
+	return allRows, nil
+}
+
+// IsErrQuotaExceeded memeriksa apakah error mengindikasikan kuota habis (HTTP 429).
+func IsErrQuotaExceeded(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "status 429") || strings.Contains(err.Error(), "Too Many Requests")
+}
+

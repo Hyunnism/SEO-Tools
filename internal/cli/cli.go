@@ -19,6 +19,9 @@ import (
 	"seo-boost/internal/config"
 	"seo-boost/internal/crawl"
 	"seo-boost/internal/google"
+	"seo-boost/internal/inspect"
+	"seo-boost/internal/model"
+	"seo-boost/internal/perf"
 	"seo-boost/internal/sitemap"
 )
 
@@ -31,6 +34,8 @@ Perintah tersedia:
   doctor    periksa konfigurasi, kredensial, dan izin properti GSC
   discover  temukan URL situs dari sitemap dan spider BFS internal
   crawl     rayapi halaman web dan audit on-page SEO
+  inspect   periksa status crawl & index halaman dari Google Search Console
+  perf      tarik metrik performa pencarian (klik, impresi, posisi) dari GSC
   help      tampilkan bantuan ini
 
 Flag global: --config --site --format --out --verbose
@@ -82,7 +87,11 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return discover(rest, stdout, stderr)
 	case "crawl":
 		return crawlCmd(rest, stdout, stderr)
-	case "inspect", "perf", "gap", "submit", "run", "report", "serve", "indexnow-key":
+	case "inspect":
+		return inspectCmd(rest, stdout, stderr)
+	case "perf":
+		return perfCmd(rest, stdout, stderr)
+	case "gap", "submit", "run", "report", "serve", "indexnow-key":
 		fmt.Fprintf(stderr, "perintah %q belum tersedia\n", cmd)
 		return 1
 	default:
@@ -573,3 +582,314 @@ func crawlCmd(args []string, stdout, stderr io.Writer) int {
 	_ = log
 	return 0
 }
+
+func inspectCmd(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("inspect", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	g := globalFlags(fs)
+	limit := 50
+	force := false
+	dryRun := false
+	fs.IntVar(&limit, "limit", 50, "batas maksimal URL yang diinspeksi pada run ini")
+	fs.BoolVar(&force, "force", false, "inspeksi ulang meskipun usia inspeksi belum lewat reinspect_after_days")
+	fs.BoolVar(&dryRun, "dry-run", false, "hanya tampilkan antrian dan sisa kuota tanpa memanggil Google API")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 1
+	}
+
+	log := newLogger(stderr, g.verbose)
+	c, err := config.Load(g.config)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Muat config: %v\n", err)
+		return 1
+	}
+
+	site, err := resolveSite(c, g.site)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] %v\n", err)
+		return 1
+	}
+
+	ctx := context.Background()
+	hc := defaultHTTPClient
+	if hc == nil {
+		hc = &http.Client{Timeout: 30 * time.Second}
+	}
+
+	// 1. Kumpulkan URL yang ada (dari sitemap)
+	var sitemaps []string
+	if len(site.Sitemaps) > 0 {
+		sitemaps = append(sitemaps, site.Sitemaps...)
+	} else {
+		discovered, _ := sitemap.AutoDiscover(ctx, hc, site.BaseURL)
+		sitemaps = append(sitemaps, discovered...)
+	}
+
+	var pages []*model.Page
+	seenURLs := make(map[string]bool)
+
+	for _, sm := range sitemaps {
+		urls, err := sitemap.FetchAndParse(ctx, hc, sm, site.BaseURL, site.ExcludePaths, 0)
+		if err == nil {
+			for _, u := range urls {
+				if !seenURLs[u] {
+					seenURLs[u] = true
+					pages = append(pages, &model.Page{
+						URL:       u,
+						InSitemap: true,
+					})
+				}
+			}
+		}
+	}
+
+	if len(pages) == 0 {
+		pages = append(pages, &model.Page{
+			URL:       site.BaseURL,
+			InSitemap: false,
+		})
+	}
+
+	// 2. Siapkan QuotaManager
+	qm := inspect.NewQuotaManager(c.DataDir, nil)
+	usedToday, _ := qm.GetUsedToday(site.Name)
+	remBudget := qm.RemainingBudget(site.Name, c.Defaults.InspectDailyBudget)
+
+	// 3. Susun antrian terprioritas
+	queue := inspect.BuildInspectQueue(pages, site.PriorityPaths, c.Defaults.ReinspectAfterDays, force, time.Now())
+
+	fmt.Fprintf(stdout, "=== GSC URL Inspection (%s) ===\n", site.Name)
+	fmt.Fprintf(stdout, "Target Properti: %s\n", site.GSCProperty)
+	fmt.Fprintf(stdout, "Kuota Hari Ini (Pacific Time): %d terpakai, %d sisa budget (Budget Harian: %d)\n",
+		usedToday, remBudget, c.Defaults.InspectDailyBudget)
+	fmt.Fprintf(stdout, "Total URL Siap Inspeksi: %d kandidat\n", len(queue))
+
+	if dryRun {
+		fmt.Fprintln(stdout, "\n[DRY RUN] Daftar antrian prioritas inspeksi:")
+		maxShow := limit
+		if maxShow > len(queue) {
+			maxShow = len(queue)
+		}
+		for i := 0; i < maxShow; i++ {
+			item := queue[i]
+			fmt.Fprintf(stdout, " %2d. [P%d: %s] %s\n", i+1, item.Priority, item.Reason, item.URL)
+		}
+		if len(queue) > maxShow {
+			fmt.Fprintf(stdout, " ...dan %d URL lainnya.\n", len(queue)-maxShow)
+		}
+		return 0
+	}
+
+	if remBudget <= 0 {
+		fmt.Fprintln(stderr, "\n[PERINGATAN] Budget inspeksi harian untuk site ini sudah habis. Gunakan besok atau naikkan inspect_daily_budget di config.json.")
+		return 0
+	}
+
+	effectiveLimit := limit
+	if remBudget < effectiveLimit {
+		effectiveLimit = remBudget
+	}
+	if len(queue) > effectiveLimit {
+		queue = queue[:effectiveLimit]
+	}
+
+	if len(queue) == 0 {
+		fmt.Fprintln(stdout, "\nTidak ada URL yang perlu diinspeksi saat ini. Gunakan flag --force untuk memaksa inspeksi ulang.")
+		return 0
+	}
+
+	// Inisialisasi Google Client
+	var gOpts []google.ClientOption
+	gOpts = append(gOpts, google.WithLogger(log))
+	if defaultHTTPClient != nil {
+		gOpts = append(gOpts, google.WithHTTPClient(defaultHTTPClient))
+	}
+	gClient, err := google.NewClientFromFile(c.ServiceAccountFile, gOpts...)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Inisialisasi Google Client: %v\n", err)
+		return 1
+	}
+
+	rpm := c.Defaults.InspectRPM
+	if rpm <= 0 {
+		rpm = 600
+	}
+	fmt.Fprintf(stdout, "\nMemulai inspeksi %d URL (Rate limit: %d RPM)...\n\n", len(queue), rpm)
+
+	var outBuf bytes.Buffer
+	statusCounts := make(map[model.IndexStatus]int)
+
+	workerCfg := inspect.InspectWorkerConfig{
+		RPM:      rpm,
+		SiteName: site.Name,
+		Property: site.GSCProperty,
+	}
+
+	processed, batchErr := inspect.InspectBatch(ctx, gClient, qm, queue, workerCfg, func(item inspect.PrioritizedURL, info *model.IndexInfo, itemErr error) {
+		if itemErr != nil {
+			fmt.Fprintf(stdout, "[-] [GAGAL] %s -> %v\n", item.URL, itemErr)
+			return
+		}
+		statusCounts[info.Status]++
+
+		canonInfo := ""
+		if info.GoogleCanon != "" {
+			canonInfo = fmt.Sprintf(" (Canon: %s)", info.GoogleCanon)
+		}
+		fmt.Fprintf(stdout, "[+] [%s] %s -> %s%s\n", strings.ToUpper(info.Verdict), item.URL, info.Status, canonInfo)
+		fmt.Fprintf(&outBuf, "- [%s] %s -> Status: %s, Coverage: %q, PageFetch: %s%s\n",
+			strings.ToUpper(info.Verdict), item.URL, info.Status, info.RawCoverage, info.PageFetch, canonInfo)
+	})
+
+	fmt.Fprintf(stdout, "\nSelesai menginspeksi %d URL.\nRingkasan Status: ", processed)
+	for st, count := range statusCounts {
+		fmt.Fprintf(stdout, "%s: %d  ", st, count)
+	}
+	fmt.Fprintln(stdout)
+
+	if batchErr != nil {
+		fmt.Fprintf(stderr, "\n[PERINGATAN] %v\n", batchErr)
+	}
+
+	if g.out != "" {
+		summaryStr := fmt.Sprintf("=== Laporan URL Inspection (%s) ===\nTanggal: %s\nTotal: %d\n\n%s",
+			site.Name, time.Now().Format("2006-01-02 15:04:05"), processed, outBuf.String())
+		if err := os.WriteFile(g.out, []byte(summaryStr), 0o644); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Tulis file output %s: %v\n", g.out, err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "Laporan inspeksi disimpan di: %s\n", g.out)
+	}
+
+	return 0
+}
+
+func perfCmd(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("perf", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	g := globalFlags(fs)
+	days := 28
+	fs.IntVar(&days, "days", 28, "jumlah hari rentang data performa yang ditarik")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 1
+	}
+
+	log := newLogger(stderr, g.verbose)
+	c, err := config.Load(g.config)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Muat config: %v\n", err)
+		return 1
+	}
+
+	site, err := resolveSite(c, g.site)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] %v\n", err)
+		return 1
+	}
+
+	if days <= 0 {
+		if c.Defaults.PerfDays > 0 {
+			days = c.Defaults.PerfDays
+		} else {
+			days = 28
+		}
+	}
+
+	startDate, endDate := perf.CalculateDateRange(time.Now(), days)
+
+	var gOpts []google.ClientOption
+	gOpts = append(gOpts, google.WithLogger(log))
+	if defaultHTTPClient != nil {
+		gOpts = append(gOpts, google.WithHTTPClient(defaultHTTPClient))
+	}
+	gClient, err := google.NewClientFromFile(c.ServiceAccountFile, gOpts...)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Inisialisasi Google Client: %v\n", err)
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "Mengambil data performa GSC untuk %s (%s s.d. %s)...\n", site.Name, startDate, endDate)
+
+	ctx := context.Background()
+	agg := perf.NewAggregator(gClient, site.BaseURL)
+	perfMap, err := agg.FetchAndAggregate(ctx, site.GSCProperty, startDate, endDate)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Ambil data Search Analytics: %v\n", err)
+		return 1
+	}
+
+	var pageURLs []string
+	totalClicks := 0.0
+	totalImpressions := 0.0
+	weightedPosSum := 0.0
+
+	for u, p := range perfMap {
+		pageURLs = append(pageURLs, u)
+		totalClicks += p.Clicks
+		totalImpressions += p.Impressions
+		weightedPosSum += p.Position * p.Impressions
+	}
+	sort.Strings(pageURLs)
+
+	avgPosition := 0.0
+	overallCTR := 0.0
+	if totalImpressions > 0 {
+		avgPosition = weightedPosSum / totalImpressions
+		overallCTR = totalClicks / totalImpressions
+	}
+
+	var outBuf bytes.Buffer
+	fmt.Fprintf(&outBuf, "\n=== Performa Pencarian GSC (%s) ===\n", site.Name)
+	fmt.Fprintf(&outBuf, "Periode: %s s.d. %s (%d hari)\n", startDate, endDate, days)
+	fmt.Fprintf(&outBuf, "Total Halaman Tayang: %d\n", len(pageURLs))
+	fmt.Fprintf(&outBuf, "Total Klik: %.0f | Total Impresi: %.0f | Rata-rata CTR: %.2f%% | Rata-rata Posisi: %.1f\n\n",
+		totalClicks, totalImpressions, overallCTR*100, avgPosition)
+
+	if len(pageURLs) == 0 {
+		fmt.Fprintln(&outBuf, "(Belum ada data impresi atau klik tercatat pada periode ini)")
+	} else {
+		for i, u := range pageURLs {
+			p := perfMap[u]
+			badge := "    "
+			if p.Page1 {
+				badge = "[P1]"
+			}
+			fmt.Fprintf(&outBuf, "%2d. %s %s\n    Klik: %.0f | Impresi: %.0f | CTR: %.2f%% | Pos: %.1f\n",
+				i+1, badge, u, p.Clicks, p.Impressions, p.CTR*100, p.Position)
+
+			if len(p.Queries) > 0 {
+				maxQ := 5
+				if len(p.Queries) < maxQ {
+					maxQ = len(p.Queries)
+				}
+				var qList []string
+				for _, q := range p.Queries[:maxQ] {
+					qList = append(qList, fmt.Sprintf("%q (%.0f klk, %.0f imp, pos %.1f)", q.Query, q.Clicks, q.Impressions, q.Position))
+				}
+				fmt.Fprintf(&outBuf, "    Top Kueri: %s\n", strings.Join(qList, "; "))
+			}
+		}
+	}
+
+	resultStr := outBuf.String()
+	fmt.Fprint(stdout, resultStr)
+
+	if g.out != "" {
+		if err := os.WriteFile(g.out, []byte(resultStr), 0o644); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Tulis file output %s: %v\n", g.out, err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "\nLaporan performa tersimpan di: %s\n", g.out)
+	}
+
+	return 0
+}
+

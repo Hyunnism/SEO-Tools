@@ -33,7 +33,7 @@ flowchart LR
 | 0 Fondasi | 0,5 hari | ✅ | 2026-10-26 / cf3dbbe |
 | 1A Auth & Doctor | 1 hari | ✅ | 2026-10-26 / 61dd9c7 |
 | 1B Discovery & Crawl | 2 hari | ✅ | 2026-10-27 / 3154920 |
-| 1C Inspect & Perf | 1–2 hari | ⬜ | |
+| 1C Inspect & Perf | 1–2 hari | ✅ | 2026-10-27 / fd155b8 |
 | 1D Analyze, Store, Report | 1–2 hari | ⬜ | |
 | 1E Integrasi MVP | 0,5–1 hari | ⬜ | |
 | 2A Submit | 1 hari | ⬜ | |
@@ -148,26 +148,26 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 1A lulus. (Dapat dikerjakan paralel dengan 1B.)
 
 **Task**
-- [ ] `gsc.go`: `urlInspection/index:inspect`, `searchAnalytics/query` (paginasi 25.000), `sites.list`
-- [ ] `inspect.go`: pemetaan `IndexStatus` (urutan prioritas 9.4)
-- [ ] Penjadwal antrian hemat kuota + rate limit `time.Ticker` + stop saat 429
-- [ ] `quota.json` (tanggal Pacific Time), `now` bisa disuntik
-- [ ] `perf`: rentang tanggal (hari ini − 3), agregasi per halaman (posisi berbobot impresi), `Page1`
+- [x] `gsc.go`: `urlInspection/index:inspect`, `searchAnalytics/query` (paginasi 25.000), `sites.list`
+- [x] `inspect.go`: pemetaan `IndexStatus` (urutan prioritas 9.4)
+- [x] Penjadwal antrian hemat kuota + rate limit `time.Ticker` + stop saat 429
+- [x] `quota.json` (tanggal Pacific Time), `now` bisa disuntik
+- [x] `perf`: rentang tanggal (hari ini − 3), agregasi per halaman (posisi berbobot impresi), `Page1`
 
 **Test**
-- [ ] Pemetaan status: **satu kasus per baris tabel 9.4**, plus `coverageState` tak dikenal → `other` dengan `RawCoverage` terjaga
-- [ ] Parsing respons dari fixture respons Google yang sudah dianonimkan
-- [ ] Penjadwal: urutan prioritas benar, tidak melebihi `min(budget − terpakai, --limit)`, tidak inspeksi ulang sebelum `reinspect_after_days` kecuali `--force`
-- [ ] Reset kuota ganti hari (zona Pacific) dengan jam palsu, termasuk batas tengah malam Pacific
-- [ ] 429 → berhenti, URL sisa tidak dicoba lagi pada run itu
-- [ ] Paginasi: 2–3 halaman dari mock, berhenti saat baris < `rowLimit`
-- [ ] Agregasi: contoh hitungan manual (posisi rata-rata berbobot, CTR = klik/impresi), `Page1` tepat di batas 10,0
-- [ ] Pencocokan URL GSC ↔ `Page` setelah normalisasi
-- [ ] `-race` pada worker inspect
+- [x] Pemetaan status: **satu kasus per baris tabel 9.4**, plus `coverageState` tak dikenal → `other` dengan `RawCoverage` terjaga
+- [x] Parsing respons dari fixture respons Google yang sudah dianonimkan
+- [x] Penjadwal: urutan prioritas benar, tidak melebihi `min(budget − terpakai, --limit)`, tidak inspeksi ulang sebelum `reinspect_after_days` kecuali `--force`
+- [x] Reset kuota ganti hari (zona Pacific) dengan jam palsu, termasuk batas tengah malam Pacific
+- [x] 429 → berhenti, URL sisa tidak dicoba lagi pada run itu
+- [x] Paginasi: 2–3 halaman dari mock, berhenti saat baris < `rowLimit`
+- [x] Agregasi: contoh hitungan manual (posisi rata-rata berbobot, CTR = klik/impresi), `Page1` tepat di batas 10,0
+- [x] Pencocokan URL GSC ↔ `Page` setelah normalisasi
+- [x] `-race` pada worker inspect
 
-**Verifikasi:** Gate Standar. Manual opsional: `inspect --limit 5` dan `perf` pada properti asli.
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + manual live `seo-boost inspect --limit 2` dan `seo-boost perf` pada properti asli.
 **Definition of Done:** `inspect` dan `perf` mengembalikan data benar dari mock dan tidak melanggar kuota.
-**Gate lulus:** [ ] ______
+**Gate lulus:** [x] 2026-10-27 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live GSC awanverse sukses)
 
 ---
 

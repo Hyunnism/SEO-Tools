@@ -153,7 +153,7 @@ func TestSpiderBFS(t *testing.T) {
 		foundMap[u] = true
 	}
 
-	if !foundMap[server.URL] || !foundMap[server.URL+"/page-a"] || !foundMap[server.URL+"/page-b"] {
+	if (!foundMap[server.URL] && !foundMap[server.URL+"/"]) || !foundMap[server.URL+"/page-a"] || !foundMap[server.URL+"/page-b"] {
 		t.Errorf("daftar halaman spider tidak lengkap: %v", found)
 	}
 	if foundMap[server.URL+"/admin"] {

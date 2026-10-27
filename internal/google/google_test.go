@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -457,4 +458,151 @@ type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
+}
+
+func TestInspectURL(t *testing.T) {
+	_, pemStr := generateTestRSAKey(t)
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"mock-token","expires_in":3600}`)
+	}))
+	defer tokenServer.Close()
+
+	var inspectedSite, inspectedURL string
+	mockGSC := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/urlInspection/index:inspect" {
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			inspectedSite = body["siteUrl"]
+			inspectedURL = body["inspectionUrl"]
+
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{
+				"inspectionResult": {
+					"inspectionUrl": "https://example.com/page1",
+					"indexStatusResult": {
+						"verdict": "PASS",
+						"coverageState": "Submitted and indexed",
+						"robotsTxtState": "ALLOWED",
+						"indexingState": "INDEXING_ALLOWED",
+						"lastCrawlTime": "2026-10-25T12:00:00Z",
+						"pageFetchState": "SUCCESSFUL",
+						"googleCanonical": "https://example.com/page1",
+						"userCanonical": "https://example.com/page1",
+						"crawledAs": "MOBILE"
+					}
+				}
+			}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer mockGSC.Close()
+
+	customTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "searchconsole.googleapis.com" {
+			req.URL.Scheme = "http"
+			req.URL.Host = mockGSC.Listener.Addr().String()
+		}
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	saKey := ServiceAccountKey{
+		ClientEmail: "test@example.com",
+		PrivateKey:  pemStr,
+		TokenURI:    tokenServer.URL,
+	}
+	saJSON, _ := json.Marshal(saKey)
+	client, err := NewClientFromBytes(saJSON, WithHTTPClient(&http.Client{Transport: customTransport}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := client.InspectURL(context.Background(), "sc-domain:example.com", "https://example.com/page1")
+	if err != nil {
+		t.Fatalf("InspectURL failed: %v", err)
+	}
+	if inspectedSite != "sc-domain:example.com" || inspectedURL != "https://example.com/page1" {
+		t.Errorf("request payload incorrect: site=%s url=%s", inspectedSite, inspectedURL)
+	}
+	if res.Verdict != "PASS" || res.CoverageState != "Submitted and indexed" {
+		t.Errorf("result incorrect: %+v", res)
+	}
+}
+
+func TestQuerySearchAnalytics_Pagination(t *testing.T) {
+	_, pemStr := generateTestRSAKey(t)
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"mock-token","expires_in":3600}`)
+	}))
+	defer tokenServer.Close()
+
+	callCount := 0
+	mockGSC := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		var req searchAnalyticsQueryRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		w.Header().Set("Content-Type", "application/json")
+		// Buat respons berdasarkan startRow
+		if req.StartRow == 0 {
+			// Batch pertama: 2 baris (misal batas batch kita tes dengan batchSize)
+			fmt.Fprint(w, `{"rows":[
+				{"keys":["https://example.com/1","seo tools"],"clicks":10,"impressions":100,"ctr":0.1,"position":2.5},
+				{"keys":["https://example.com/1","audit tools"],"clicks":5,"impressions":50,"ctr":0.1,"position":4.0}
+			]}`)
+		} else {
+			// Batch kedua: 1 baris
+			fmt.Fprint(w, `{"rows":[
+				{"keys":["https://example.com/2","rank tracker"],"clicks":2,"impressions":20,"ctr":0.1,"position":6.0}
+			]}`)
+		}
+	}))
+	defer mockGSC.Close()
+
+	customTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "www.googleapis.com" {
+			req.URL.Scheme = "http"
+			req.URL.Host = mockGSC.Listener.Addr().String()
+		}
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	saKey := ServiceAccountKey{
+		ClientEmail: "test@example.com",
+		PrivateKey:  pemStr,
+		TokenURI:    tokenServer.URL,
+	}
+	saJSON, _ := json.Marshal(saKey)
+	client, err := NewClientFromBytes(saJSON, WithHTTPClient(&http.Client{Transport: customTransport}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Request rowLimit 50 (karena batch 1 hanya 2 baris yang mana < 25000, paginasi berhenti di batch 1)
+	rows, err := client.QuerySearchAnalytics(context.Background(), "sc-domain:example.com", "2026-10-01", "2026-10-24", 50)
+	if err != nil {
+		t.Fatalf("QuerySearchAnalytics failed: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Errorf("expected 2 rows, got %d", len(rows))
+	}
+	if callCount != 1 {
+		t.Errorf("expected 1 call because len(rows) < batchSize, got %d", callCount)
+	}
+}
+
+func TestIsErrQuotaExceeded(t *testing.T) {
+	if IsErrQuotaExceeded(nil) {
+		t.Error("nil error should return false")
+	}
+	if !IsErrQuotaExceeded(errors.New("HTTP request failed with status 429: Too Many Requests")) {
+		t.Error("status 429 should be recognized as quota exceeded")
+	}
+	if IsErrQuotaExceeded(errors.New("connection timeout")) {
+		t.Error("timeout should return false")
+	}
 }

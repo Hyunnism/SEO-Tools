@@ -61,7 +61,7 @@ func TestUnknownCommand(t *testing.T) {
 }
 
 func TestNotYetAvailable(t *testing.T) {
-	code, _, errs := run("inspect")
+	code, _, errs := run("gap")
 	if code != 1 || !strings.Contains(errs, "belum tersedia") {
 		t.Fatalf("code=%d err=%q", code, errs)
 	}
@@ -300,5 +300,113 @@ func TestResolveSite(t *testing.T) {
 	// 5. Banyak site, nama tidak ditemukan
 	if _, err := resolveSite(cfgMulti, "s3"); err == nil {
 		t.Error("expected error for nonexistent site")
+	}
+}
+
+func TestInspectAndPerfCmd(t *testing.T) {
+	pemKey := generateTestRSAKeyPEM(t)
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/token":
+			fmt.Fprint(w, `{"access_token":"mock-token","expires_in":3600}`)
+		case "/robots.txt":
+			w.Header().Set("Content-Type", "text/plain")
+			fmt.Fprintf(w, "User-agent: *\nSitemap: http://%s/sitemap.xml\n", r.Host)
+		case "/sitemap.xml":
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+	<url><loc>http://%s/</loc></url>
+</urlset>`, r.Host)
+		case "/v1/urlInspection/index:inspect":
+			fmt.Fprint(w, `{
+				"inspectionResult": {
+					"inspectionUrl": "http://127.0.0.1/",
+					"indexStatusResult": {
+						"verdict": "PASS",
+						"coverageState": "Submitted and indexed",
+						"pageFetchState": "SUCCESSFUL"
+					}
+				}
+			}`)
+		default:
+			if strings.Contains(r.URL.Path, "searchAnalytics/query") {
+				fmt.Fprint(w, `{"rows":[
+					{"keys":["http://127.0.0.1/","seo keyword"],"clicks":12,"impressions":100,"ctr":0.12,"position":4.5}
+				]}`)
+				return
+			}
+			http.NotFound(w, r)
+		}
+	}))
+	defer mockServer.Close()
+
+	customTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "searchconsole.googleapis.com" || req.URL.Host == "www.googleapis.com" {
+			req.URL.Scheme = "http"
+			req.URL.Host = mockServer.Listener.Addr().String()
+		}
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	defaultHTTPClient = &http.Client{Transport: customTransport}
+	defer func() { defaultHTTPClient = nil }()
+
+	dir := t.TempDir()
+	sa := google.ServiceAccountKey{
+		ClientEmail: "test-bot@example.iam.gserviceaccount.com",
+		PrivateKey:  pemKey,
+		TokenURI:    mockServer.URL + "/token",
+	}
+	saBytes, _ := json.Marshal(sa)
+	_ = os.WriteFile(filepath.Join(dir, "sa.json"), saBytes, 0o600)
+
+	cfgContent := fmt.Sprintf(`{
+		"service_account_file": "./sa.json",
+		"data_dir": "%s",
+		"defaults": {
+			"inspect_rpm": 600,
+			"inspect_daily_budget": 50,
+			"perf_days": 28
+		},
+		"sites": [
+			{
+				"name": "example",
+				"base_url": "http://%s",
+				"gsc_property": "sc-domain:example.com"
+			}
+		]
+	}`, filepath.ToSlash(filepath.Join(dir, "data")), mockServer.Listener.Addr().String())
+
+	cfgPath := filepath.Join(dir, "config.json")
+	_ = os.WriteFile(cfgPath, []byte(cfgContent), 0o600)
+
+	// 1. Test inspect --dry-run
+	code, out, errs := run("inspect", "--config", cfgPath, "--dry-run")
+	if code != 0 {
+		t.Fatalf("inspect dry-run failed code=%d err=%s out=%s", code, errs, out)
+	}
+	if !strings.Contains(out, "[DRY RUN]") || !strings.Contains(out, "sisa budget (Budget Harian: 50)") {
+		t.Errorf("inspect dry-run output invalid: %s", out)
+	}
+
+	// 2. Test inspect live run
+	code, out, errs = run("inspect", "--config", cfgPath, "--limit", "1")
+	if code != 0 {
+		t.Fatalf("inspect run failed code=%d err=%s out=%s", code, errs, out)
+	}
+	if !strings.Contains(out, "Selesai menginspeksi") || !strings.Contains(out, "indexed: 1") {
+		t.Errorf("inspect run output invalid: %s", out)
+	}
+
+	// 3. Test perf run
+	code, out, errs = run("perf", "--config", cfgPath, "--days", "28")
+	if code != 0 {
+		t.Fatalf("perf run failed code=%d err=%s out=%s", code, errs, out)
+	}
+	if !strings.Contains(out, "=== Performa Pencarian GSC") || !strings.Contains(out, "Total Klik: 12") {
+		t.Errorf("perf run output invalid: %s", out)
 	}
 }
