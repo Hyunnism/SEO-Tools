@@ -210,3 +210,4 @@ func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	newReq.URL.Host = strings.TrimPrefix(t.targetHost, "http://")
 	return http.DefaultTransport.RoundTrip(newReq)
 }
+
