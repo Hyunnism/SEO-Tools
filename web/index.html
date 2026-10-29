@@ -701,7 +701,7 @@
         const tbody = document.getElementById('gapsTableBody');
         tbody.innerHTML = '';
         if (gapsData.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:24px;">Tidak ada keyword gap terdeteksi.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:24px;">Tidak ada keyword gap terdeteksi.<br><small style=\"font-size:12px; color:#9ca3af;\">Keyword gap memerlukan data kueri dari Google Search Console dengan impresi minimal 50. Jika situs baru atau belum memiliki impresi pencarian, data gap belum tersedia.</small></td></tr>';
           return;
         }
 
