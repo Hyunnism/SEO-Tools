@@ -166,7 +166,44 @@ Proyek ini dilengkapi dengan skrip *quality gate* otomatis yang memvalidasi `vet
 
 ---
 
-## 7. Lisensi
+## 7. Otomasi & Penjadwalan (100% Lokal)
+
+`seo-boost` didesain untuk berjalan otomatis di latar belakang memanfaatkan fasilitas penjadwal bawaan sistem operasi lokal Anda (tanpa perlu menyalakan layanan cloud berbayar atau dependensi pihak ketiga).
+
+### A. Windows Task Scheduler (Setiap Senin 07:00 WIB)
+Gunakan skrip pembantu otomatis yang tersedia di `examples/scheduling/setup_task_windows.ps1`:
+
+```powershell
+# 1. Simulasi pengecekan perintah (WhatIf)
+powershell -ExecutionPolicy Bypass -File .\examples\scheduling\setup_task_windows.ps1 -WhatIf
+
+# 2. Daftarkan tugas terjadwal mingguan secara otomatis
+powershell -ExecutionPolicy Bypass -File .\examples\scheduling\setup_task_windows.ps1
+```
+
+Tugas akan terdaftar di Windows Task Scheduler dengan nama `SEOBoost_WeeklyAudit` dan menjalankan pipeline penuh setiap Senin pagi, menyimpan laporan terbaru ke `reports/weekly_report.md`.
+
+### B. Linux / macOS Cron Job
+Salin baris cron dari `examples/scheduling/crontab.example` ke crontab pengguna (`crontab -e`):
+
+```cron
+0 7 * * 1 cd /path/to/seo-boost && ./seo-boost run --site all --format md --out reports/weekly_latest.md >> reports/cron.log 2>&1
+```
+
+### C. Pemicu Pasca-Deploy Artikel Baru (Instant Ping)
+Segera setelah artikel baru selesai dipublikasikan/dideploy di website Anda, jalankan skrip hook berikut untuk langsung memberi tahu Google dan mesin pencari IndexNow:
+
+```powershell
+# Windows
+powershell -ExecutionPolicy Bypass -File .\examples\scheduling\post_deploy_hook.ps1 -Site nama_situs
+
+# Linux / macOS
+./examples/scheduling/post_deploy_hook.sh nama_situs
+```
+
+---
+
+## 8. Lisensi
 
 MIT License. Dibuat dengan pendekatan *Ponytail* (sederhana, efisien, tanpa beban dependensi pihak ketiga).
 

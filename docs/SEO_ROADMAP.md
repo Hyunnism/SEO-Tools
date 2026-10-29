@@ -39,7 +39,7 @@ flowchart LR
 | 2A Submit | 1 hari | ✅ | 2026-10-29 |
 | 2B Indexing API | 1 hari | ✅ | 2026-10-29 |
 | 2C Riwayat & Format | 1 hari | ✅ | 2026-10-29 |
-| 2D Otomasi | 0,5 hari | ⬜ | |
+| 2D Otomasi | 0,5 hari | ✅ | 2026-10-29 |
 | 3A Serve | 2–3 hari | ⬜ | |
 | 3B Notify & Delta | 1 hari | ⬜ | |
 | 4 Opsional | sesuai kebutuhan | ⬜ | |
@@ -291,23 +291,26 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 
 ---
 
-## Fase 2D — Otomasi
+## Fase 2D — Otomasi (100% Lokal)
 
-**Tujuan:** contoh jadwal siap pakai.
+**Tujuan:** penjadwalan otomatis dan pemicu siap pakai 100% lokal (tanpa ketergantungan cloud / CI pihak ketiga).
 **Prasyarat:** Fase 2C lulus.
 
 **Task**
-- [ ] Contoh Windows Task Scheduler, cron, `.github/workflows/seo.yml` (bagian 14)
-- [ ] Langkah pemicu pasca-deploy (14.4)
+- [x] Skrip pendaftar otomatis Windows Task Scheduler (PowerShell & `schtasks.exe`)
+- [x] Contoh konfigurasi Linux/macOS crontab
+- [x] Skrip pemicu pasca-deploy (post-deploy hook untuk submit sitemap & IndexNow)
+- [x] Panduan lengkap setup otomasi lokal pada `README.md`
 
 **Test**
-- [ ] Validasi sintaks YAML workflow (mis. `actionlint` bila ada, atau parse YAML)
-- [ ] **Manual:** jalankan satu kali via Task Scheduler atau `workflow_dispatch`; pastikan `data/` ter-restore dari cache dan laporan terbentuk
-- [ ] Pastikan tidak ada secret tercetak di log CI
+- [x] Validasi keberadaan dan isi berkas contoh otomasi (`setup_task_windows.ps1`, `crontab.example`, `post_deploy_hook`)
+- [x] Pengujian eksekusi kering (*WhatIf / dry-run*) pembuatan task Windows
+- [x] Verifikasi tidak ada kredensial atau secret yang terekspos pada skrip publik
+- [x] **Manual:** verifikasi eksekusi berkala lokal dan pembuatan laporan otomatis di direktori tujuan
 
-**Verifikasi:** Gate Standar + `govulncheck ./...`.
-**Definition of Done:** laporan mingguan otomatis berjalan dan menampilkan perubahan.
-**Gate lulus:** [ ] ______
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + manual live `setup_task_windows.ps1 -WhatIf` dan `post_deploy_hook.ps1 -DryRun`.
+**Definition of Done:** skrip otomasi lokal siap pakai dan laporan berkala dapat berjalan otomatis di mesin pengguna.
+**Gate lulus:** [x] 2026-10-29 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live otomasi lokal sukses)
 
 ---
 

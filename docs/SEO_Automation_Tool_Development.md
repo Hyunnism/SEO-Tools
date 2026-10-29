@@ -1239,58 +1239,44 @@ go mod vendor
 
 ---
 
-## 14. Otomasi / Scheduling
+## 14. Otomasi / Scheduling (100% Lokal)
 
-Tool **tidak** memuat penjadwal sendiri (Ponytail). Pakai yang sudah ada di OS atau CI.
+Tool **tidak** memuat penjadwal daemon sendiri (Ponytail). Eksekusi otomatis sepenuhnya diserahkan kepada fasilitas penjadwal bawaan sistem operasi lokal pengguna, tanpa memerlukan layanan cloud atau CI pihak ketiga (100% lokal, tanpa biaya, data privat tidak keluar dari mesin lokal).
 
 ### 14.1 Windows Task Scheduler (tiap Senin 07:00)
 
+Dapat didaftarkan melalui perintah PowerShell atau `schtasks.exe`:
+
 ```powershell
 schtasks /Create /SC WEEKLY /D MON /ST 07:00 /TN "seo-boost" `
-  /TR "C:\tools\seo-boost\seo-boost.exe run --site all --format md --out C:\tools\seo-boost\reports\latest.md --notify"
+  /TR "C:\tools\seo-boost\seo-boost.exe run --site all --format md --out C:\tools\seo-boost\reports\latest.md" /F
 ```
+
+Skrip pembantu siap pakai disediakan di `examples/scheduling/setup_task_windows.ps1` yang dapat mendeteksi lokasi biner `seo-boost.exe` saat ini dan mendaftarkannya secara otomatis.
 
 ### 14.2 Linux cron
 
+Untuk pengguna Linux / macOS / server lokal:
+
 ```cron
-0 7 * * 1  cd /opt/seo-boost && ./seo-boost run --site all --format md --out reports/latest.md --notify
+0 7 * * 1  cd /opt/seo-boost && ./seo-boost run --site all --format md --out reports/latest.md >> /var/log/seo-boost.log 2>&1
 ```
 
-### 14.3 GitHub Actions (`.github/workflows/seo.yml`)
+Contoh konfigurasi crontab siap pakai disediakan di `examples/scheduling/crontab.example`.
 
-```yaml
-name: seo-boost
-on:
-  schedule: [{ cron: "0 0 * * 1" }]   # Senin 07:00 WIB
-  workflow_dispatch: {}
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version: "1.22" }
-      - run: go build -trimpath -ldflags "-s -w" -o seo-boost .
-      - run: |
-          mkdir -p secrets
-          echo '${{ secrets.GSC_SA_JSON }}' > secrets/sa.json
-      - uses: actions/cache@v4
-        with:
-          path: data
-          key: seoboost-data-${{ github.run_id }}
-          restore-keys: seoboost-data-
-      - run: ./seo-boost run --site all --format md --out report.md --notify
-        env:
-          SEOBOOST_TG_TOKEN: ${{ secrets.SEOBOOST_TG_TOKEN }}
-      - uses: actions/upload-artifact@v4
-        with: { name: seo-report, path: report.md }
+### 14.3 Pemicu Setelah Publish Artikel Baru (Post-Deploy Hook)
+
+Pemicu satu baris yang dapat disisipkan pada skrip deploy / build lokal website setelah artikel baru selesai dipublikasikan:
+
+```bash
+# Windows PowerShell
+.\seo-boost.exe submit --site portfolio --gsc --indexnow
+
+# Linux / Bash
+./seo-boost submit --site portfolio --gsc --indexnow
 ```
 
-> Folder `data/` di-cache supaya diff antar run dan penghitung kuota tetap ada. Jika cache hilang, tool otomatis memulai dari nol, tidak ada yang rusak.
-
-### 14.4 Pemicu Setelah Publish Artikel Baru
-
-Tambahkan satu langkah di pipeline deploy website: `seo-boost submit --site portfolio --gsc --indexnow`. Cukup 1 baris, tanpa mengubah kode website.
+Skrip contoh disediakan di `examples/scheduling/post_deploy_hook.ps1` dan `examples/scheduling/post_deploy_hook.sh`.
 
 ---
 

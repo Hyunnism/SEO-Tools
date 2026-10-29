@@ -1,0 +1,24 @@
+# ==============================================================================
+# SEO-BOOST: CONTOH KONFIGURASI LINUX / macOS CRONTAB (100% LOKAL)
+# ==============================================================================
+#
+# Panduan Pemasangan:
+# 1. Buka editor crontab pengguna:
+#    crontab -e
+#
+# 2. Sesuaikan direktori kerja (/opt/seo-boost atau direktori proyek Anda).
+#
+# 3. Tempelkan baris jadwal di bawah ini, lalu simpan.
+#
+# Format 5 Kolom:
+# Menit (0-59) | Jam (0-23) | Hari-Bulan (1-31) | Bulan (1-12) | Hari-Minggu (0-7, 1=Senin)
+# ==============================================================================
+
+# OPSI A: Audit Berkala Mingguan (Setiap Senin pukul 07:00 pagi)
+0 7 * * 1 cd /opt/seo-boost && ./seo-boost run --site all --format md --out reports/weekly_latest.md >> reports/cron.log 2>&1
+
+# OPSI B: Audit Berkala dalam Format HTML Mandiri (Setiap Senin pukul 07:00 pagi)
+# 0 7 * * 1 cd /opt/seo-boost && ./seo-boost run --site all --format html --out reports/weekly_latest.html >> reports/cron.log 2>&1
+
+# OPSI C: Pengiriman Sitemap Harian Otomatis (Setiap Hari pukul 02:00 dini hari)
+# 0 2 * * * cd /opt/seo-boost && ./seo-boost submit --site all --gsc --indexnow >> reports/submit.log 2>&1
