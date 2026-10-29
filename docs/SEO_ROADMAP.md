@@ -38,7 +38,7 @@ flowchart LR
 | 1E Integrasi MVP | 0,5–1 hari | ✅ | 2026-10-29 |
 | 2A Submit | 1 hari | ✅ | 2026-10-29 |
 | 2B Indexing API | 1 hari | ✅ | 2026-10-29 |
-| 2C Riwayat & Format | 1 hari | ⬜ | |
+| 2C Riwayat & Format | 1 hari | ✅ | 2026-10-29 |
 | 2D Otomasi | 0,5 hari | ⬜ | |
 | 3A Serve | 2–3 hari | ⬜ | |
 | 3B Notify & Delta | 1 hari | ⬜ | |
@@ -275,19 +275,19 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 1E lulus.
 
 **Task**
-- [ ] Riwayat `runs/` (pangkas 90 terakhir) + `report --diff`
-- [ ] Format `md` dan `html` (satu file mandiri, CSS inline)
-- [ ] Exit code 0/1/2 + `--fail-on-issues`
+- [x] Riwayat `runs/` (pangkas 90 terakhir) + `report --diff`
+- [x] Format `md` dan `html` (satu file mandiri, CSS inline)
+- [x] Exit code 0/1/2 + `--fail-on-issues`
 
 **Test**
-- [ ] Diff: halaman baru ter-index, hilang dari index, posisi naik/turun ≥ 3; tanpa perubahan → diff kosong
-- [ ] Pangkas: run ke-91 menghapus yang terlama
-- [ ] **Golden file** `md` dan `html`; HTML di-escape (tidak ada injeksi dari judul halaman)
-- [ ] Exit code: sukses bersih → 0, error runtime → 1, ada masalah tanpa `--fail-on-issues` → 0, dengan flag → 2
+- [x] Diff: halaman baru ter-index, hilang dari index, posisi naik/turun ≥ 3; tanpa perubahan → diff kosong
+- [x] Pangkas: run ke-91 menghapus yang terlama
+- [x] **Golden file** `md` dan `html`; HTML di-escape (tidak ada injeksi dari judul halaman)
+- [x] Exit code: sukses bersih → 0, error runtime → 1, ada masalah tanpa `--fail-on-issues` → 0, dengan flag → 2
 
-**Verifikasi:** Gate Standar.
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + manual live `seo-boost report --site awanverse --format md/html/--fail-on-issues`.
 **Definition of Done:** laporan mingguan bisa dibandingkan dan CI bisa gagal-kan build.
-**Gate lulus:** [ ] ______
+**Gate lulus:** [x] 2026-10-29 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live awanverse sukses)
 
 ---
 

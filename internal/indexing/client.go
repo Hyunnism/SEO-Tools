@@ -42,3 +42,4 @@ func GetMetadata(ctx context.Context, client *google.Client, targetURL string) (
 
 	return &meta, nil
 }
+

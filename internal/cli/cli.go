@@ -1142,6 +1142,11 @@ func reportCmd(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	g := globalFlags(fs)
 
+	failOnIssues := false
+	diffOnly := false
+	fs.BoolVar(&failOnIssues, "fail-on-issues", false, "kembalikan exit code 2 bila ditemukan masalah kritis")
+	fs.BoolVar(&diffOnly, "diff", false, "tampilkan perbandingan terhadap run sebelumnya")
+
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -1210,12 +1215,23 @@ func reportCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	var outBuf bytes.Buffer
-	if g.format == "json" {
+	switch strings.ToLower(g.format) {
+	case "json":
 		if err := report.RenderJSON(&outBuf, repData); err != nil {
 			fmt.Fprintf(stderr, "[GAGAL] Render JSON: %v\n", err)
 			return 1
 		}
-	} else {
+	case "md", "markdown":
+		if err := report.RenderMarkdown(&outBuf, repData); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Render Markdown: %v\n", err)
+			return 1
+		}
+	case "html":
+		if err := report.RenderHTML(&outBuf, repData); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Render HTML: %v\n", err)
+			return 1
+		}
+	default:
 		if err := report.RenderText(&outBuf, repData); err != nil {
 			fmt.Fprintf(stderr, "[GAGAL] Render report: %v\n", err)
 			return 1
@@ -1236,6 +1252,11 @@ func reportCmd(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		fmt.Fprintf(stdout, "\nLaporan tersimpan di: %s\n", g.out)
+	}
+
+	if failOnIssues && report.HasCriticalIssues(pages, reportedIssues, site.PriorityPaths) {
+		fmt.Fprintf(stderr, "\n[PERINGATAN] Ditemukan masalah kritis SEO pada situs %s (--fail-on-issues aktif: exit code 2).\n", site.Name)
+		return 2
 	}
 
 	return 0

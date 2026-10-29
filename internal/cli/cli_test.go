@@ -570,5 +570,118 @@ func TestGapAndReportCmd(t *testing.T) {
 	if repEnvelope["schema"].(float64) != 1 {
 		t.Errorf("expected schema 1 in report json, got %v", repEnvelope["schema"])
 	}
+
+	// 7. Test report command Markdown (--format md --out report.md)
+	mdPath := filepath.Join(dir, "report.md")
+	code, _, errs = run("report", "--config", cfgPath, "--site", "example", "--format", "md", "--out", mdPath)
+	if code != 0 {
+		t.Fatalf("report md failed code=%d err=%s", code, errs)
+	}
+	mdContent, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatalf("failed to read report.md: %v", err)
+	}
+	if !strings.Contains(string(mdContent), "# SEO Report: example") || !strings.Contains(string(mdContent), "| Terindeks [OK] |") {
+		t.Errorf("invalid markdown report content: %s", string(mdContent))
+	}
+
+	// 8. Test report command HTML (--format html --out report.html)
+	htmlPath := filepath.Join(dir, "report.html")
+	code, _, errs = run("report", "--config", cfgPath, "--site", "example", "--format", "html", "--out", htmlPath)
+	if code != 0 {
+		t.Fatalf("report html failed code=%d err=%s", code, errs)
+	}
+	htmlContent, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatalf("failed to read report.html: %v", err)
+	}
+	if !strings.Contains(string(htmlContent), "<!DOCTYPE html>") || !strings.Contains(string(htmlContent), "SEO Audit & Performance Report") {
+		t.Errorf("invalid html report content: %s", string(htmlContent))
+	}
+}
+
+func TestReportCmd_ExitCodesAndFailOnIssues(t *testing.T) {
+	dir := t.TempDir()
+	dataDir := filepath.Join(dir, "data")
+	cfgPath := filepath.Join(dir, "config.json")
+	_ = os.WriteFile(filepath.Join(dir, "sa.json"), []byte(`{"client_email":"a@b.com","private_key":"k","token_uri":"https://oauth2.googleapis.com/token"}`), 0o600)
+	_ = os.WriteFile(cfgPath, []byte(fmt.Sprintf(`{
+		"service_account_file": "./sa.json",
+		"data_dir": "%s",
+		"sites": [{"name": "site-test", "base_url": "https://test.com", "gsc_property": "sc-domain:test.com", "priority_paths": ["/"]}]
+	}`, filepath.ToSlash(dataDir))), 0o600)
+
+	st := store.NewStore(dataDir)
+
+	// 1. Kasus Bersih (semua 200 OK & Indexed)
+	_ = st.SavePages("site-test", []*model.Page{
+		{
+			URL:  "https://test.com/",
+			Path: "/",
+			Crawl: &model.CrawlInfo{
+				HTTPStatus: 200,
+			},
+			Index: &model.IndexInfo{
+				Status: model.StatusIndexed,
+			},
+		},
+	})
+
+	// Tanpa --fail-on-issues -> exit code 0
+	code, _, _ := run("report", "--config", cfgPath, "--site", "site-test")
+	if code != 0 {
+		t.Errorf("expected code 0, got %d", code)
+	}
+
+	// Dengan --fail-on-issues -> tetap exit code 0 karena bersih
+	code, _, _ = run("report", "--config", cfgPath, "--site", "site-test", "--fail-on-issues")
+	if code != 0 {
+		t.Errorf("expected code 0 on clean site with --fail-on-issues, got %d", code)
+	}
+
+	// 2. Tambahkan halaman bermasalah (HTTP 500 & error audit)
+	_ = st.SavePages("site-test", []*model.Page{
+		{
+			URL:  "https://test.com/",
+			Path: "/",
+			Crawl: &model.CrawlInfo{
+				HTTPStatus: 200,
+			},
+			Index: &model.IndexInfo{
+				Status: model.StatusIndexed,
+			},
+		},
+		{
+			URL:  "https://test.com/broken",
+			Path: "/broken",
+			Crawl: &model.CrawlInfo{
+				HTTPStatus: 500,
+			},
+			Audit: []model.AuditIssue{
+				{Code: "ERR_HTTP_500", Severity: "error", Detail: "Internal Server Error"},
+			},
+		},
+	})
+
+	// Tanpa --fail-on-issues -> exit code 0 (analisis sukses selesai)
+	code, _, _ = run("report", "--config", cfgPath, "--site", "site-test")
+	if code != 0 {
+		t.Errorf("expected code 0 when issues exist without flag, got %d", code)
+	}
+
+	// Dengan --fail-on-issues -> harus exit code 2!
+	code, _, errs := run("report", "--config", cfgPath, "--site", "site-test", "--fail-on-issues")
+	if code != 2 {
+		t.Errorf("expected exit code 2 with --fail-on-issues when problems exist, got %d (err: %s)", code, errs)
+	}
+	if !strings.Contains(errs, "exit code 2") {
+		t.Errorf("expected warning about exit code 2 in stderr, got: %s", errs)
+	}
+
+	// 3. Error runtime (misal file config tidak valid) -> exit code 1
+	code, _, _ = run("report", "--config", filepath.Join(dir, "non-existent.json"), "--site", "site-test")
+	if code != 1 {
+		t.Errorf("expected exit code 1 on runtime error, got %d", code)
+	}
 }
 

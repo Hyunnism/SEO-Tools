@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"seo-boost/internal/analyze"
@@ -37,6 +38,7 @@ func runOrchestrator(args []string, stdout, stderr io.Writer) int {
 	minImp := 50
 	dryRun := false
 	force := false
+	failOnIssues := false
 
 	fs.BoolVar(&spider, "spider", true, "sertakan internal spider BFS untuk melengkapi sitemap")
 	fs.IntVar(&concurrency, "concurrency", 0, "jumlah worker paralel crawling")
@@ -46,6 +48,7 @@ func runOrchestrator(args []string, stdout, stderr io.Writer) int {
 	fs.IntVar(&minImp, "min-imp", 50, "ambang minimum impresi untuk keyword gap")
 	fs.BoolVar(&dryRun, "dry-run", false, "simulasikan inspect tanpa memanggil API Google")
 	fs.BoolVar(&force, "force", false, "paksa inspeksi ulang mengabaikan batas reinspect_after_days")
+	fs.BoolVar(&failOnIssues, "fail-on-issues", false, "kembalikan exit code 2 bila ditemukan masalah kritis")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -377,12 +380,23 @@ func runOrchestrator(args []string, stdout, stderr io.Writer) int {
 	}
 
 	var outBuf bytes.Buffer
-	if g.format == "json" {
+	switch strings.ToLower(g.format) {
+	case "json":
 		if err := report.RenderJSON(&outBuf, repData); err != nil {
 			fmt.Fprintf(stderr, "[GAGAL] Render JSON: %v\n", err)
 			return 1
 		}
-	} else {
+	case "md", "markdown":
+		if err := report.RenderMarkdown(&outBuf, repData); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Render Markdown: %v\n", err)
+			return 1
+		}
+	case "html":
+		if err := report.RenderHTML(&outBuf, repData); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Render HTML: %v\n", err)
+			return 1
+		}
+	default:
 		if err := report.RenderText(&outBuf, repData); err != nil {
 			fmt.Fprintf(stderr, "[GAGAL] Render report: %v\n", err)
 			return 1
@@ -398,6 +412,11 @@ func runOrchestrator(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		fmt.Fprintf(stdout, "\nLaporan lengkap tersimpan di: %s\n", g.out)
+	}
+
+	if failOnIssues && report.HasCriticalIssues(pages, reportedIssues, site.PriorityPaths) {
+		fmt.Fprintf(stderr, "\n[PERINGATAN] Ditemukan masalah kritis SEO pada situs %s (--fail-on-issues aktif: exit code 2).\n", site.Name)
+		return 2
 	}
 
 	return 0

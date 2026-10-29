@@ -312,3 +312,90 @@ func TestRunOrchestrator_FreshStart(t *testing.T) {
 	}
 }
 
+func TestRunOrchestrator_FormatMarkdownAndHTML(t *testing.T) {
+	webServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>Format Test</title></head><body><h1>Testing Formats</h1></body></html>`)
+	}))
+	defer webServer.Close()
+
+	defaultHTTPClient = webServer.Client()
+	defer func() { defaultHTTPClient = nil }()
+
+	dir := t.TempDir()
+	dataDir := filepath.Join(dir, "data")
+	_ = os.WriteFile(filepath.Join(dir, "sa.json"), []byte(`{"client_email":"a@b.com","private_key":"k","token_uri":"https://oauth2.googleapis.com/token"}`), 0o600)
+	cfgContent := fmt.Sprintf(`{
+		"service_account_file": "./sa.json",
+		"data_dir": "%s",
+		"sites": [{"name": "format_site", "base_url": "%s", "gsc_property": "sc-domain:format.com"}]
+	}`, filepath.ToSlash(dataDir), webServer.URL)
+	cfgPath := filepath.Join(dir, "config.json")
+	_ = os.WriteFile(cfgPath, []byte(cfgContent), 0o600)
+
+	mdPath := filepath.Join(dir, "run_report.md")
+	var outBuf, errBuf bytes.Buffer
+	code := Run([]string{"run", "--config", cfgPath, "--site", "format_site", "--format", "md", "--out", mdPath}, &outBuf, &errBuf, "0.1.0")
+	if code != 0 {
+		t.Fatalf("run md failed with code %d: %s", code, errBuf.String())
+	}
+	if _, err := os.Stat(mdPath); err != nil {
+		t.Errorf("markdown report was not created at %s: %v", mdPath, err)
+	}
+
+	htmlPath := filepath.Join(dir, "run_report.html")
+	outBuf.Reset()
+	errBuf.Reset()
+	code = Run([]string{"run", "--config", cfgPath, "--site", "format_site", "--format", "html", "--out", htmlPath}, &outBuf, &errBuf, "0.1.0")
+	if code != 0 {
+		t.Fatalf("run html failed with code %d: %s", code, errBuf.String())
+	}
+	if _, err := os.Stat(htmlPath); err != nil {
+		t.Errorf("html report was not created at %s: %v", htmlPath, err)
+	}
+}
+
+func TestRunOrchestrator_FailOnIssuesExitCode2(t *testing.T) {
+	// Web server dengan halaman 404 (menghasilkan audit issue atau HTTP non-200)
+	webServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>Root</title></head><body><a href="/missing">Link</a></body></html>`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer webServer.Close()
+
+	defaultHTTPClient = webServer.Client()
+	defer func() { defaultHTTPClient = nil }()
+
+	dir := t.TempDir()
+	dataDir := filepath.Join(dir, "data")
+	_ = os.WriteFile(filepath.Join(dir, "sa.json"), []byte(`{"client_email":"a@b.com","private_key":"k","token_uri":"https://oauth2.googleapis.com/token"}`), 0o600)
+	cfgContent := fmt.Sprintf(`{
+		"service_account_file": "./sa.json",
+		"data_dir": "%s",
+		"sites": [{"name": "broken_site", "base_url": "%s", "gsc_property": "sc-domain:broken.com"}]
+	}`, filepath.ToSlash(dataDir), webServer.URL)
+	cfgPath := filepath.Join(dir, "config.json")
+	_ = os.WriteFile(cfgPath, []byte(cfgContent), 0o600)
+
+	// 1. Tanpa flag --fail-on-issues: harus exit 0
+	var outBuf, errBuf bytes.Buffer
+	code := Run([]string{"run", "--config", cfgPath, "--site", "broken_site"}, &outBuf, &errBuf, "0.1.0")
+	if code != 0 {
+		t.Fatalf("expected code 0 without flag, got %d: %s", code, errBuf.String())
+	}
+
+	// 2. Dengan flag --fail-on-issues: karena ada halaman 404, harus exit 2!
+	outBuf.Reset()
+	errBuf.Reset()
+	code = Run([]string{"run", "--config", cfgPath, "--site", "broken_site", "--fail-on-issues"}, &outBuf, &errBuf, "0.1.0")
+	if code != 2 {
+		t.Fatalf("expected exit code 2 with --fail-on-issues, got %d (err: %s)", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "exit code 2") {
+		t.Errorf("expected warning about exit code 2 in stderr: %s", errBuf.String())
+	}
+}
+

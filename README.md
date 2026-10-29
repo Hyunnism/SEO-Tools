@@ -118,10 +118,22 @@ Anda juga dapat menjalankan tahapan secara terpisah sesuai kebutuhan:
   ```bash
   ./seo-boost gap --site portfolio --min-imp 50
   ```
-- **Cetak Laporan SEO & Diff**:
+- **Cetak Laporan SEO, Diff & Format**:
   ```bash
+  # Tampilkan di terminal (teks bersih)
   ./seo-boost report --site portfolio --format text
+
+  # Ekspor format Markdown (GFM tables)
+  ./seo-boost report --site portfolio --format md --out report.md
+
+  # Ekspor format HTML mandiri (CSS inline, auto-escaped anti-XSS)
+  ./seo-boost report --site portfolio --format html --out report.html
+
+  # Ekspor format JSON untuk mesin / CI
   ./seo-boost report --site portfolio --format json --out report.json
+
+  # Integrasi CI/CD: keluar dengan exit code 2 bila ditemukan masalah kritis
+  ./seo-boost report --site portfolio --fail-on-issues
   ```
 - **Kirim Sitemap ke GSC & Ping IndexNow**:
   ```bash

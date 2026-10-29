@@ -240,3 +240,218 @@ func TestRenderJSON(t *testing.T) {
 		t.Errorf("expected site 'awanverse', got %q", env.Data.Site)
 	}
 }
+
+func TestRenderMarkdown_GoldenStructure(t *testing.T) {
+	data := &ReportData{
+		Site:        "example",
+		GSCProperty: "sc-domain:example.com",
+		Timestamp:   time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC),
+		Summary: &model.RunSummary{
+			TotalPages:       5,
+			IndexedCount:     4,
+			TroubledCount:    1,
+			Page1Count:       2,
+			TotalClicks:      120,
+			TotalImpressions: 1500,
+			AveragePosition:  5.4,
+		},
+		Diff: &RunDiff{
+			HasPrevRun:       true,
+			NewIndexed:       []string{"https://example.com/new"},
+			DeIndexed:        []string{"https://example.com/gone"},
+			RankGains:        []RankShift{{URL: "https://example.com/gain", OldPosition: 8.0, NewPosition: 4.0, Shift: -4.0}},
+			RankDrops:        []RankShift{{URL: "https://example.com/drop", OldPosition: 3.0, NewPosition: 7.0, Shift: 4.0}},
+			DeltaClicks:      20,
+			DeltaImpressions: 300,
+			DeltaAvgPosition: -0.5,
+		},
+		TopGaps: []model.QueryGap{
+			{
+				QueryPerf: model.QueryPerf{Query: "test keyword", Position: 4.2, Impressions: 800, CTR: 0.05},
+				Category:  model.CategoryLowHangingFruit,
+				Match:     model.MatchPartial,
+				Score:     18.2,
+			},
+		},
+		AuditIssues: []ReportedIssue{
+			{
+				URL:      "https://example.com/drop",
+				Code:     "MISSING_H1",
+				Severity: "error",
+				Detail:   "H1 tag not found",
+			},
+		},
+		Pages: []*model.Page{
+			{
+				URL:  "https://example.com/gain",
+				Path: "/gain",
+				Crawl: &model.CrawlInfo{
+					HTTPStatus: 200,
+					Title:      "Gain Page",
+				},
+				Index: &model.IndexInfo{
+					Status: model.StatusIndexed,
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderMarkdown(&buf, data); err != nil {
+		t.Fatalf("RenderMarkdown failed: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "# SEO Report: example") {
+		t.Errorf("missing title in markdown: %s", out)
+	}
+	if !strings.Contains(out, "| Terindeks [OK] | 4 |") {
+		t.Errorf("missing summary row in markdown: %s", out)
+	}
+	if !strings.Contains(out, "### [+] Halaman Baru Terindeks (1)") {
+		t.Errorf("missing new indexed header: %s", out)
+	}
+	if !strings.Contains(out, "### [UP] Kenaikan Peringkat Signifikan (>= 3 Posisi, Total: 1)") {
+		t.Errorf("missing rank gain header: %s", out)
+	}
+
+	// Verifikasi tidak ada karakter emoji atau non-ASCII
+	for i, r := range out {
+		if r > unicode.MaxASCII {
+			t.Errorf("forbidden non-ASCII character %q at offset %d in markdown", r, i)
+		}
+	}
+}
+
+func TestRenderHTML_XSS_AutoEscaping(t *testing.T) {
+	data := &ReportData{
+		Site:        "xss-test",
+		Timestamp:   time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC),
+		Summary: &model.RunSummary{
+			TotalPages:   1,
+			IndexedCount: 1,
+		},
+		TopGaps: []model.QueryGap{
+			{
+				QueryPerf: model.QueryPerf{Query: "<script>alert('xss-query')</script>"},
+				Category:  "BOOST",
+				Match:     model.MatchAbsent,
+				Score:     10.0,
+			},
+		},
+		AuditIssues: []ReportedIssue{
+			{
+				URL:      "https://example.com/issue",
+				Code:     "TEST",
+				Severity: "error",
+				Detail:   "<img src=x onerror=alert('xss-detail')>",
+			},
+		},
+		Pages: []*model.Page{
+			{
+				URL: "https://example.com/malicious",
+				Crawl: &model.CrawlInfo{
+					HTTPStatus: 200,
+					Title:      "<script>alert('xss-title')</script>",
+				},
+				Index: &model.IndexInfo{
+					Status: model.StatusIndexed,
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, data); err != nil {
+		t.Fatalf("RenderHTML failed: %v", err)
+	}
+
+	out := buf.String()
+
+	// Pastikan HTML template meng-escape string XSS secara otomatis
+	if strings.Contains(out, "<script>alert('xss-title')</script>") {
+		t.Errorf("XSS unescaped in title: %s", out)
+	}
+	if !strings.Contains(out, "&lt;script&gt;alert(&#39;xss-title&#39;)&lt;/script&gt;") && !strings.Contains(out, "&lt;script&gt;alert('xss-title')&lt;/script&gt;") {
+		t.Errorf("expected escaped title in HTML, got: %s", out)
+	}
+
+	if strings.Contains(out, "<script>alert('xss-query')</script>") {
+		t.Errorf("XSS unescaped in query: %s", out)
+	}
+	if strings.Contains(out, "<img src=x onerror=alert('xss-detail')>") {
+		t.Errorf("XSS unescaped in detail: %s", out)
+	}
+	if !strings.Contains(out, "<!DOCTYPE html>") {
+		t.Errorf("missing DOCTYPE in HTML: %s", out)
+	}
+}
+
+func TestHasCriticalIssues(t *testing.T) {
+	// 1. Kasus Bersih
+	cleanPages := []*model.Page{
+		{
+			URL:  "https://example.com/",
+			Path: "/",
+			Crawl: &model.CrawlInfo{
+				HTTPStatus: 200,
+			},
+			Index: &model.IndexInfo{
+				Status: model.StatusIndexed,
+			},
+		},
+	}
+	if HasCriticalIssues(cleanPages, nil, []string{"/"}) {
+		t.Errorf("expected no critical issues for clean pages")
+	}
+
+	// 2. Kasus Isu Audit dengan Severity Error
+	errorIssues := []ReportedIssue{
+		{Code: "ERR_CANONICAL", Severity: "error", Detail: "Invalid canonical"},
+	}
+	if !HasCriticalIssues(cleanPages, errorIssues, []string{"/"}) {
+		t.Errorf("expected critical issue when error severity present")
+	}
+
+	// 3. Kasus Halaman HTTP 500
+	brokenPages := []*model.Page{
+		{
+			URL:  "https://example.com/broken",
+			Path: "/broken",
+			Crawl: &model.CrawlInfo{
+				HTTPStatus: 500,
+			},
+		},
+	}
+	if !HasCriticalIssues(brokenPages, nil, nil) {
+		t.Errorf("expected critical issue when HTTP status 500 present")
+	}
+
+	// 4. Kasus Halaman StatusBlocked
+	blockedPages := []*model.Page{
+		{
+			URL:  "https://example.com/blocked",
+			Path: "/blocked",
+			Index: &model.IndexInfo{
+				Status: model.StatusBlocked,
+			},
+		},
+	}
+	if !HasCriticalIssues(blockedPages, nil, nil) {
+		t.Errorf("expected critical issue when status blocked present")
+	}
+
+	// 5. Kasus Halaman Prioritas Hilang/Tidak Terindeks
+	unindexedPriority := []*model.Page{
+		{
+			URL:  "https://example.com/vip",
+			Path: "/vip",
+			Index: &model.IndexInfo{
+				Status: model.StatusCrawledNotIndexed,
+			},
+		},
+	}
+	if !HasCriticalIssues(unindexedPriority, nil, []string{"/vip"}) {
+		t.Errorf("expected critical issue when priority path is not indexed")
+	}
+}

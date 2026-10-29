@@ -98,3 +98,4 @@ func CalculateAverageCrawlLatency(pages []*model.Page, store *SiteIndexingStore)
 	}
 	return totalLatency / time.Duration(count), count
 }
+

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -170,5 +171,56 @@ func TestStore_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestStore_PruneRunsTo90(t *testing.T) {
+	dir := t.TempDir()
+	st := NewStore(dir)
+	site := "prune-test"
+
+	baseTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+
+	// Simpan 95 run berturut-turut
+	for i := 1; i <= 95; i++ {
+		runTime := baseTime.Add(time.Duration(i) * time.Hour)
+		summary := &model.RunSummary{
+			TotalPages: i,
+			Timestamp:  runTime,
+		}
+		if err := st.SaveRun(site, summary); err != nil {
+			t.Fatalf("gagal simpan run ke-%d: %v", i, err)
+		}
+	}
+
+	runs, err := st.ListRuns(site)
+	if err != nil {
+		t.Fatalf("ListRuns gagal: %v", err)
+	}
+
+	// Harus dipangkas tepat menjadi 90 berkas
+	if len(runs) != 90 {
+		t.Fatalf("panjang runs = %d, ingin tepat 90", len(runs))
+	}
+
+	// Berkas terlama yang tersisa harus dari run ke-6 (karena 1-5 dipangkas)
+	expectedOldestTimestamp := baseTime.Add(6 * time.Hour).Format("2006-01-02T15-04-05Z")
+	if !strings.HasPrefix(runs[0], expectedOldestTimestamp) {
+		t.Errorf("berkas terlama yang tersisa salah: got %s, want prefix %s", runs[0], expectedOldestTimestamp)
+	}
+
+	// Berkas terbaru harus dari run ke-95
+	expectedNewestTimestamp := baseTime.Add(95 * time.Hour).Format("2006-01-02T15-04-05Z")
+	if !strings.HasPrefix(runs[len(runs)-1], expectedNewestTimestamp) {
+		t.Errorf("berkas terbaru salah: got %s, want prefix %s", runs[len(runs)-1], expectedNewestTimestamp)
+	}
+
+	// Uji LoadRunByID
+	loadedRun, err := st.LoadRunByID(site, runs[0])
+	if err != nil {
+		t.Fatalf("LoadRunByID gagal: %v", err)
+	}
+	if loadedRun.TotalPages != 6 {
+		t.Errorf("loadedRun.TotalPages = %d, want 6", loadedRun.TotalPages)
+	}
 }
 

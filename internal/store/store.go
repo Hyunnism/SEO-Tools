@@ -164,6 +164,26 @@ func (s *Store) LoadPreviousRun(site string) (*model.RunSummary, error) {
 	return loadRunFile(prevPath)
 }
 
+// ListRuns mengembalikan daftar nama berkas run yang tersimpan (terurut dari terlama ke terbaru).
+func (s *Store) ListRuns(site string) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.listRunFilesLocked(s.runsDir(site))
+}
+
+// LoadRunByID memuat run summary berdasarkan runID (nama berkas atau timestamp).
+func (s *Store) LoadRunByID(site string, runID string) (*model.RunSummary, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if !strings.HasSuffix(runID, ".json") {
+		runID += ".json"
+	}
+	targetPath := filepath.Join(s.runsDir(site), runID)
+	return loadRunFile(targetPath)
+}
+
 func loadRunFile(path string) (*model.RunSummary, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
