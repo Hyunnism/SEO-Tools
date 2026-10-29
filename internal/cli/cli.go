@@ -46,6 +46,7 @@ Perintah tersedia:
   run       eksekusi pipeline penuh: discover -> crawl -> inspect -> perf -> gap -> report
   submit    kirim sitemap ke GSC, ping IndexNow, dan Google Indexing API
   serve     jalankan dashboard web lokal terpadu (UI & REST API)
+  notify    kirim notifikasi ringkas & diff ke Telegram / Discord
   indexnow-key buat kunci autentikasi baru untuk protokol IndexNow
   help      tampilkan bantuan ini
 
@@ -115,6 +116,8 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 	case "serve":
 		return serveCmd(rest, stdout, stderr)
 	case "notify":
+		return notifyCmd(rest, stdout, stderr)
+	case "log-server":
 		fmt.Fprintf(stderr, "perintah %q belum tersedia\n", cmd)
 		return 1
 	default:

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"seo-boost/internal/config"
+	"seo-boost/internal/notify"
 	"seo-boost/internal/report"
 	"seo-boost/internal/store"
 )
@@ -30,6 +31,7 @@ func runOrchestrator(args []string, stdout, stderr io.Writer) int {
 	dryRun := false
 	force := false
 	failOnIssues := false
+	notifyModeStr := "auto"
 
 	fs.BoolVar(&spider, "spider", true, "sertakan internal spider BFS untuk melengkapi sitemap")
 	fs.IntVar(&concurrency, "concurrency", 0, "jumlah worker paralel crawling")
@@ -40,6 +42,7 @@ func runOrchestrator(args []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&dryRun, "dry-run", false, "simulasikan inspect tanpa memanggil API Google")
 	fs.BoolVar(&force, "force", false, "paksa inspeksi ulang mengabaikan batas reinspect_after_days")
 	fs.BoolVar(&failOnIssues, "fail-on-issues", false, "kembalikan exit code 2 bila ditemukan masalah kritis")
+	fs.StringVar(&notifyModeStr, "notify", "auto", "mode notifikasi: auto (hanya bila ada perubahan) | always | off")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -85,6 +88,7 @@ func runOrchestrator(args []string, stdout, stderr io.Writer) int {
 		minImp:      minImp,
 		dryRun:      dryRun,
 		force:       force,
+		notifyMode:  notify.NotifyMode(notifyModeStr),
 	}
 
 	pages, currSummary, diff, allGaps, err := executePipeline(ctx, c, site, opts, log, st, nil, stdout)

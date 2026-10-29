@@ -127,6 +127,15 @@ func TestComputeDiff(t *testing.T) {
 	if diff.DeltaClicks != expectedDeltaClicks {
 		t.Errorf("expected delta clicks %.1f, got %.1f", expectedDeltaClicks, diff.DeltaClicks)
 	}
+
+	if !diff.HasMeaningfulChanges() {
+		t.Errorf("expected HasMeaningfulChanges to be true")
+	}
+
+	emptyDiff := ComputeDiff(nil, nil)
+	if emptyDiff.HasMeaningfulChanges() {
+		t.Errorf("expected empty diff HasMeaningfulChanges to be false")
+	}
 }
 
 func TestRenderText_NoEmojiOrUnicode(t *testing.T) {

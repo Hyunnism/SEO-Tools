@@ -379,9 +379,9 @@ const htmlReportTemplate = `<!DOCTYPE html>
             <td>{{if .Crawl}}{{.Crawl.HTTPStatus}}{{else}}0{{end}}</td>
             <td class="url-text">{{.URL}}</td>
             <td>{{if and .Crawl .Crawl.Title}}{{.Crawl.Title}}{{else}}-{{end}}</td>
-            <td>{{if .Perf}}{{printf "%.0f" .Perf.Clicks}}{{else}}0{{end}}</td>
-            <td>{{if .Perf}}{{printf "%.0f" .Perf.Impressions}}{{else}}0{{end}}</td>
-            <td>{{if .Perf}}{{printf "%.1f" .Perf.Position}}{{else}}0.0{{end}}</td>
+            <td>{{if .Perf}}{{printf "%.0f" .Perf.Clicks}}{{if and .Perf.Delta (ne .Perf.Delta.Clicks 0.0)}} ({{printf "%+.0f" .Perf.Delta.Clicks}}){{end}}{{else}}0{{end}}</td>
+            <td>{{if .Perf}}{{printf "%.0f" .Perf.Impressions}}{{if and .Perf.Delta (ne .Perf.Delta.Impressions 0.0)}} ({{printf "%+.0f" .Perf.Delta.Impressions}}){{end}}{{else}}0{{end}}</td>
+            <td>{{if .Perf}}{{printf "%.1f" .Perf.Position}}{{if and .Perf.Delta (lt .Perf.Delta.Position -0.05)}} [UP {{printf "%.1f" (negShift .Perf.Delta.Position)}}]{{else if and .Perf.Delta (gt .Perf.Delta.Position 0.05)}} [DOWN {{printf "%.1f" .Perf.Delta.Position}}]{{end}}{{else}}0.0{{end}}</td>
           </tr>
           {{end}}
         </tbody>

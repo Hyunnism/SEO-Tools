@@ -16,6 +16,7 @@ import (
 	"seo-boost/internal/google"
 	"seo-boost/internal/inspect"
 	"seo-boost/internal/model"
+	"seo-boost/internal/notify"
 	"seo-boost/internal/perf"
 	"seo-boost/internal/report"
 	"seo-boost/internal/serve"
@@ -32,6 +33,7 @@ type pipelineOptions struct {
 	minImp      int
 	dryRun      bool
 	force       bool
+	notifyMode  notify.NotifyMode
 }
 
 func defaultPipelineOptions() pipelineOptions {
@@ -44,6 +46,7 @@ func defaultPipelineOptions() pipelineOptions {
 		minImp:      50,
 		dryRun:      false,
 		force:       false,
+		notifyMode:  notify.NotifyAuto,
 	}
 }
 
@@ -285,12 +288,17 @@ func executePipeline(
 		reportProgress("perf", 0, 0, "Dilewati (Google Client tidak tersedia).")
 	} else {
 		startDate, endDate := perf.CalculateDateRange(time.Now(), opts.days)
+		prevStart, prevEnd := perf.CalculatePreviousDateRange(time.Now(), opts.days)
 		agg := perf.NewAggregator(gClient, site.BaseURL)
 		perfMap, pErr := agg.FetchAndAggregate(ctx, site.GSCProperty, startDate, endDate)
 		if pErr != nil {
 			out("      [PERINGATAN] Search Analytics error: %v\n\n", pErr)
 			reportProgress("perf", 0, 1, fmt.Sprintf("Search Analytics error: %v", pErr))
 		} else {
+			// Tarik periode pembanding sebelumnya untuk menghitung delta
+			prevPerfMap, _ := agg.FetchAndAggregate(ctx, site.GSCProperty, prevStart, prevEnd)
+			perf.CalculateDeltas(perfMap, prevPerfMap)
+
 			matched := 0
 			for u, pPerf := range perfMap {
 				p, ok := pageMap[u]
@@ -302,8 +310,8 @@ func executePipeline(
 				p.Perf = pPerf
 				matched++
 			}
-			out("      Berhasil mengambil data performa untuk %d halaman (%s s.d. %s).\n\n", matched, startDate, endDate)
-			reportProgress("perf", 1, 1, fmt.Sprintf("Data performa %d halaman siap.", matched))
+			out("      Berhasil mengambil data performa untuk %d halaman (%s s.d. %s) & menghitung delta periode.\n\n", matched, startDate, endDate)
+			reportProgress("perf", 1, 1, fmt.Sprintf("Data performa %d halaman & delta periode siap.", matched))
 		}
 	}
 
@@ -359,6 +367,28 @@ func executePipeline(
 		out("      [PERINGATAN] Gagal menyimpan run history: %v\n", err)
 	}
 	out("      Data snapshot dan riwayat run berhasil disimpan secara atomik.\n\n")
+
+	// -------------------------------------------------------------------------
+	// LANGKAH 7: Pengiriman Notifikasi (Telegram & Discord)
+	// -------------------------------------------------------------------------
+	hasCrit := report.HasCriticalIssues(pages, nil, site.PriorityPaths)
+	notifData := &notify.NotificationData{
+		Site:              site.Name,
+		Timestamp:         time.Now().UTC(),
+		Summary:           currSummary,
+		Diff:              diff,
+		HasCriticalIssues: hasCrit,
+	}
+
+	if opts.notifyMode != "" && opts.notifyMode != notify.NotifyOff {
+		sent, nErr := notify.Dispatch(ctx, hc, c.Notify, opts.notifyMode, notifData)
+		if nErr != nil && !errors.Is(nErr, notify.ErrNoChannelsConfigured) {
+			out("      [PERINGATAN] Gagal mengirim notifikasi: %v\n", nErr)
+		} else if sent {
+			out("      [INFO] Notifikasi ringkasan & diff berhasil dikirim.\n\n")
+		}
+	}
+
 	reportProgress("done", len(pages), len(pages), "Pipeline selesai dengan sukses.")
 
 	return pages, currSummary, diff, allGaps, nil

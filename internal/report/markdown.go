@@ -147,16 +147,9 @@ func RenderMarkdown(w io.Writer, data *ReportData) error {
 					title = strings.ReplaceAll(p.Crawl.Title, "|", "/")
 				}
 			}
-			clicks := 0.0
-			imp := 0.0
-			pos := 0.0
-			if p.Perf != nil {
-				clicks = p.Perf.Clicks
-				imp = p.Perf.Impressions
-				pos = p.Perf.Position
-			}
-			sb.WriteString(fmt.Sprintf("| %s | %d | `%s` | %s | %.0f | %.0f | %.1f |\n",
-				idxStatus, httpCode, p.URL, title, clicks, imp, pos))
+			clicksStr, impStr, posStr := formatPerfWithDelta(p)
+			sb.WriteString(fmt.Sprintf("| %s | %d | `%s` | %s | %s | %s | %s |\n",
+				idxStatus, httpCode, p.URL, title, clicksStr, impStr, posStr))
 		}
 		sb.WriteString("\n")
 	}

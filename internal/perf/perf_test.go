@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"seo-boost/internal/google"
+	"seo-boost/internal/model"
 )
 
 func TestCalculateDateRange(t *testing.T) {
@@ -21,6 +22,63 @@ func TestCalculateDateRange(t *testing.T) {
 	// 28 hari sebelum 2026-10-24 inklusif = 2026-09-27
 	if start != "2026-09-27" {
 		t.Errorf("got start date %s, want 2026-09-27", start)
+	}
+
+	// Periode sebelumnya (28 hari sebelum 2026-09-27)
+	// prevEndDate = 2026-09-26, prevStartDate = 2026-08-30
+	prevStart, prevEnd := CalculatePreviousDateRange(today, 28)
+	if prevEnd != "2026-09-26" {
+		t.Errorf("got prev end date %s, want 2026-09-26", prevEnd)
+	}
+	if prevStart != "2026-08-30" {
+		t.Errorf("got prev start date %s, want 2026-08-30", prevStart)
+	}
+}
+
+func TestCalculateDeltas(t *testing.T) {
+	curr := map[string]*model.PagePerf{
+		"https://example.com/blog": {
+			Clicks:      50,
+			Impressions: 500,
+			Position:    4.0,
+		},
+		"https://example.com/new": {
+			Clicks:      10,
+			Impressions: 100,
+			Position:    8.0,
+		},
+	}
+	prev := map[string]*model.PagePerf{
+		"https://example.com/blog": {
+			Clicks:      30,
+			Impressions: 400,
+			Position:    6.5,
+		},
+	}
+
+	CalculateDeltas(curr, prev)
+
+	blog := curr["https://example.com/blog"]
+	if blog.Delta == nil {
+		t.Fatal("blog.Delta should not be nil")
+	}
+	if blog.Delta.Clicks != 20 {
+		t.Errorf("expected +20 clicks delta, got %f", blog.Delta.Clicks)
+	}
+	if blog.Delta.Impressions != 100 {
+		t.Errorf("expected +100 impressions delta, got %f", blog.Delta.Impressions)
+	}
+	// Posisi turun secara numerik 4.0 - 6.5 = -2.5 (artinya ranking naik 2.5 posisi)
+	if math.Abs(blog.Delta.Position - (-2.5)) > 1e-6 {
+		t.Errorf("expected -2.5 position delta, got %f", blog.Delta.Position)
+	}
+
+	newPage := curr["https://example.com/new"]
+	if newPage.Delta == nil {
+		t.Fatal("newPage.Delta should not be nil")
+	}
+	if newPage.Delta.Clicks != 10 || newPage.Delta.Impressions != 100 {
+		t.Errorf("expected new page full gain delta, got %+v", newPage.Delta)
 	}
 }
 

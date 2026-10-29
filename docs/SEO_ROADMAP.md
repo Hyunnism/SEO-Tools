@@ -345,18 +345,18 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 3A lulus.
 
 **Task**
-- [ ] `notify.go`: Telegram + Discord (9.10), token hanya dari env var
-- [ ] Perbandingan periode di `perf` (delta ▲▼) (9.5)
+- [x] `notify.go`: Telegram + Discord (9.10), token hanya dari env var
+- [x] Perbandingan periode di `perf` (delta) (9.5)
 
 **Test**
-- [ ] Mock Telegram/Discord: payload benar, pesan terpotong ≤ ~1.500 karakter
-- [ ] Hanya kirim bila ada perubahan bermakna, kecuali `--notify always`
-- [ ] Token tidak muncul di log/laporan
-- [ ] Delta: periode sekarang vs sebelumnya dihitung benar (naik/turun/nol)
+- [x] Mock Telegram/Discord: payload benar, pesan terpotong ≤ ~1.500 karakter
+- [x] Hanya kirim bila ada perubahan bermakna, kecuali `--notify always`
+- [x] Token tidak muncul di log/laporan
+- [x] Delta: periode sekarang vs sebelumnya dihitung benar (naik/turun/nol)
 
-**Verifikasi:** Gate Standar + `govulncheck ./...`.
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + manual live `seo-boost notify`.
 **Definition of Done:** notifikasi terkirim ke mock dengan ringkasan + diff; delta tampil di laporan.
-**Gate lulus:** [ ] ______
+**Gate lulus:** [x] 2026-10-29 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live mock/real sukses)
 
 ---
 

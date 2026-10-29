@@ -88,6 +88,13 @@ type QueryPerf struct {
 	Position    float64 `json:"position"`
 }
 
+// PerfDelta mencatat perubahan metrik pencarian dibanding periode sebelumnya.
+type PerfDelta struct {
+	Clicks      float64 `json:"clicks"`
+	Impressions float64 `json:"impressions"`
+	Position    float64 `json:"position"` // negatif = ranking membaik, positif = ranking turun
+}
+
 // PagePerf menyimpan agregasi performa pencarian halaman dari GSC.
 type PagePerf struct {
 	Clicks      float64     `json:"clicks"`
@@ -96,6 +103,7 @@ type PagePerf struct {
 	Position    float64     `json:"position"` // rata-rata berbobot
 	Page1       bool        `json:"page1"`    // position <= 10
 	Queries     []QueryPerf `json:"queries"`
+	Delta       *PerfDelta  `json:"delta,omitempty"` // perbandingan vs periode sebelumnya
 }
 
 // GapCategory mewakili kategori tindakan untuk keyword gap.

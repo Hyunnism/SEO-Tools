@@ -26,6 +26,15 @@ type RunDiff struct {
 	DeltaAvgPosition float64     `json:"delta_avg_position"`
 }
 
+// HasMeaningfulChanges memeriksa apakah terdapat perubahan signifikan antara run:
+// ada halaman baru terindeks, halaman de-indexed, atau pergeseran ranking signifikan (>= 3.0).
+func (d *RunDiff) HasMeaningfulChanges() bool {
+	if d == nil || !d.HasPrevRun {
+		return false
+	}
+	return len(d.NewIndexed) > 0 || len(d.DeIndexed) > 0 || len(d.RankDrops) > 0 || len(d.RankGains) > 0
+}
+
 // ComputeDiff menghitung perbedaan antara currentPages dan prevRun.
 func ComputeDiff(currentPages []*model.Page, prevRun *model.RunSummary) *RunDiff {
 	diff := &RunDiff{}

@@ -188,19 +188,38 @@ func RenderText(w io.Writer, data *ReportData) error {
 					status = "[UNKNOWN]"
 				}
 			}
-			var clicks, imp, pos float64
-			if p.Perf != nil {
-				clicks = p.Perf.Clicks
-				imp = p.Perf.Impressions
-				pos = p.Perf.Position
-			}
-			fmt.Fprintf(tw, "%s\t%s\t%.0f\t%.0f\t%.1f\n", status, p.URL, clicks, imp, pos)
+			clicksStr, impStr, posStr := formatPerfWithDelta(p)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", status, p.URL, clicksStr, impStr, posStr)
 		}
 		tw.Flush()
 		fmt.Fprintln(w)
 	}
 
 	return nil
+}
+
+func formatPerfWithDelta(p *model.Page) (clicksStr, impStr, posStr string) {
+	if p == nil || p.Perf == nil {
+		return "0", "0", "0.0"
+	}
+	clicksStr = fmt.Sprintf("%.0f", p.Perf.Clicks)
+	impStr = fmt.Sprintf("%.0f", p.Perf.Impressions)
+	posStr = fmt.Sprintf("%.1f", p.Perf.Position)
+
+	if d := p.Perf.Delta; d != nil {
+		if d.Clicks != 0 {
+			clicksStr += fmt.Sprintf(" (%+.0f)", d.Clicks)
+		}
+		if d.Impressions != 0 {
+			impStr += fmt.Sprintf(" (%+.0f)", d.Impressions)
+		}
+		if d.Position < -0.05 {
+			posStr += fmt.Sprintf(" [UP %.1f]", -d.Position)
+		} else if d.Position > 0.05 {
+			posStr += fmt.Sprintf(" [DOWN %.1f]", d.Position)
+		}
+	}
+	return
 }
 
 func min(a, b int) int {

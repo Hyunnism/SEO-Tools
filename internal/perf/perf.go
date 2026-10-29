@@ -23,6 +23,46 @@ func CalculateDateRange(today time.Time, perfDays int) (string, string) {
 	return startDateT.Format("2006-01-02"), endDateT.Format("2006-01-02")
 }
 
+// CalculatePreviousDateRange menghitung rentang tanggal GSC periode pembanding sebelumnya:
+// prevEndDate = today - 3 - perfDays
+// prevStartDate = prevEndDate - (perfDays - 1)
+func CalculatePreviousDateRange(today time.Time, perfDays int) (string, string) {
+	if perfDays <= 0 {
+		perfDays = 28
+	}
+	prevEndDateT := today.AddDate(0, 0, -(3 + perfDays))
+	prevStartDateT := prevEndDateT.AddDate(0, 0, -(perfDays - 1))
+
+	return prevStartDateT.Format("2006-01-02"), prevEndDateT.Format("2006-01-02")
+}
+
+// CalculateDeltas menghitung delta performa antara periode saat ini vs periode sebelumnya
+// dan menyimpannya ke field Delta pada current map.
+func CalculateDeltas(current, previous map[string]*model.PagePerf) {
+	if current == nil {
+		return
+	}
+	for url, curr := range current {
+		if prev, ok := previous[url]; ok && prev != nil {
+			posDelta := 0.0
+			if prev.Position > 0 && curr.Position > 0 {
+				posDelta = curr.Position - prev.Position
+			}
+			curr.Delta = &model.PerfDelta{
+				Clicks:      curr.Clicks - prev.Clicks,
+				Impressions: curr.Impressions - prev.Impressions,
+				Position:    posDelta,
+			}
+		} else {
+			curr.Delta = &model.PerfDelta{
+				Clicks:      curr.Clicks,
+				Impressions: curr.Impressions,
+				Position:    0,
+			}
+		}
+	}
+}
+
 type Aggregator struct {
 	client  *google.Client
 	baseURL string
