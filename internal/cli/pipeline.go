@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"seo-boost/internal/analyze"
@@ -120,6 +121,14 @@ func executePipeline(
 			}
 		}
 		for _, u := range spiderURLs {
+			allFoundURLsMap[u] = true
+		}
+	}
+
+	// Masukkan priority_paths agar halaman baru langsung diaudit meski sitemap belum update
+	for _, p := range site.PriorityPaths {
+		if p != "" {
+			u := strings.TrimRight(site.BaseURL, "/") + "/" + strings.TrimLeft(p, "/")
 			allFoundURLsMap[u] = true
 		}
 	}
