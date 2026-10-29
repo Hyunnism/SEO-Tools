@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEO-BOOST &middot; Dashboard Lokal</title>
+  <style>
+    :root {
+      --bg: #0f141c;
+      --card-bg: #18202c;
+      --border: #273549;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0ea5e9;
+      --success: #4ade80;
+      --warning: #facc15;
+      --danger: #f87171;
+      --accent: #a78bfa;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Header & Navigation */
+    header {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      font-family: var(--font-mono);
+      color: var(--text);
+    }
+    .brand-tag {
+      background: #0284c7;
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    select, input, button {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    select:focus, input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    button.btn-primary {
+      background: #0284c7;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s ease;
+    }
+    button.btn-primary:hover {
+      background: #0369a1;
+    }
+    button.btn-primary:disabled {
+      background: #334155;
+      color: #64748b;
+      cursor: not-allowed;
+    }
+
+    /* Container & Tabs */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      border-radius: 0;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+    }
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    /* Cards & Stats */
+    .grid-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .card-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .card-value {
+      font-size: 24px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text);
+    }
+    .card-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Progress Banner */
+    .progress-banner {
+      background: #1e293b;
+      border: 1px solid #38bdf8;
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .progress-banner.active {
+      display: block;
+    }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-family: var(--font-mono);
+    }
+    .progress-bar-bg {
+      background: #0f172a;
+      border-radius: 4px;
+      height: 8px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .progress-bar-fill {
+      background: var(--primary);
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .progress-log {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Tables */
+    .table-responsive {
+      overflow-x: auto;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+    th {
+      background: #131b26;
+      padding: 10px 14px;
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #1f2937;
+      vertical-align: middle;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background: #1d2736;
+    }
+
+    /* Filter Controls */
+    .filter-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .filter-bar input[type="text"] {
+      flex: 1;
+      min-width: 250px;
+    }
+
+    /* ASCII Badges */
+    .badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .badge-ok { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; }
+    .badge-warn { background: #713f12; color: #fde047; border: 1px solid #ca8a04; }
+    .badge-err { background: #7f1d1d; color: #fca5a5; border: 1px solid #dc2626; }
+    .badge-info { background: #1e3a8a; color: #93c5fd; border: 1px solid #2563eb; }
+    .badge-p1 { background: #312e81; color: #c4b5fd; border: 1px solid #6366f1; }
+    .badge-gray { background: #1f2937; color: #9ca3af; border: 1px solid #374151; }
+
+    /* Modal / Drawer */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 20px;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-content {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      max-width: 800px;
+      width: 100%;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 24px;
+      position: relative;
+    }
+    .modal-close {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+    }
+    .modal-close:hover { color: #fff; }
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 16px 0 8px 0;
+      color: var(--primary);
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+    }
+    .code-block {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .list-item {
+      padding: 6px 0;
+      border-bottom: 1px solid #273549;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .list-item:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <span>SEO-BOOST</span>
+      <span class="brand-tag">LOCAL WEB UI</span>
+    </div>
+    <div class="header-controls">
+      <label for="siteSelect" style="color:var(--text-muted); font-size:12px;">SITUS:</label>
+      <select id="siteSelect">
+        <option value="">Memuat situs...</option>
+      </select>
+      <button id="runBtn" class="btn-primary" onclick="triggerRun()">[RUN AUDIT]</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Active Run Progress Banner -->
+    <div id="progressBanner" class="progress-banner">
+      <div class="progress-header">
+        <span id="progressTitle">[RUNNING] Pipeline Eksekusi...</span>
+        <span id="progressPercent">0%</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="progressBarFill" class="progress-bar-fill"></div>
+      </div>
+      <div id="progressLog" class="progress-log">Memulai run...</div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('overview')">[ Ringkasan Situs ]</button>
+      <button class="tab-btn" onclick="switchTab('pages')">[ Eksplorasi Halaman ]</button>
+      <button class="tab-btn" onclick="switchTab('gaps')">[ Keyword Gap ]</button>
+      <button class="tab-btn" onclick="switchTab('history')">[ Riwayat Run ]</button>
+    </div>
+
+    <!-- TAB 1: OVERVIEW -->
+    <div id="tab-overview" class="tab-content">
+      <div class="grid-stats">
+        <div class="card">
+          <div class="card-title">Total Halaman</div>
+          <div class="card-value" id="statTotalPages">-</div>
+          <div class="card-sub" id="statSitemapCount">sitemap: - | link: -</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Terindeks Google</div>
+          <div class="card-value" id="statIndexedPages" style="color: var(--success);">-</div>
+          <div class="card-sub" id="statIndexedPct">- dari total</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Isu On-Page & Index</div>
+          <div class="card-value" id="statIssuesCount" style="color: var(--warning);">-</div>
+          <div class="card-sub">perlu perhatian teknis</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Peluang Keyword Gap</div>
+          <div class="card-value" id="statGapsCount" style="color: var(--accent);">-</div>
+          <div class="card-sub">impresi tinggi luar Hal. 1</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Informasi Properti & Sinkronisasi</div>
+        <div class="list-item">
+          <span style="color:var(--text-muted);">Base URL:</span>
+          <span id="infoBaseURL" style="font-family:var(--font-mono); font-weight:600;">-</span>
+        </div>
+        <div class="list-item">
+          <span style="color:var(--text-muted);">GSC Property:</span>
+          <span id="infoGSCProperty" style="font-family:var(--font-mono);">-</span>
+        </div>
+        <div class="list-item">
+          <span style="color:var(--text-muted);">Run Terakhir:</span>
+          <span id="infoLastRun" style="font-family:var(--font-mono);">-</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: PAGES -->
+    <div id="tab-pages" class="tab-content" style="display:none;">
+      <div class="filter-bar">
+        <input type="text" id="pageSearchInput" placeholder="Cari URL, path, atau judul halaman..." oninput="filterPages()">
+        <select id="statusFilterSelect" onchange="filterPages()">
+          <option value="all">Semua Status Indeks</option>
+          <option value="indexed">Indexed</option>
+          <option value="crawled_not_indexed">Crawled Not Indexed</option>
+          <option value="discovered_not_indexed">Discovered Not Indexed</option>
+          <option value="other">Other / Unindexed</option>
+          <option value="error">Error / Bermasalah</option>
+        </select>
+      </div>
+
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Path / Halaman</th>
+              <th>HTTP</th>
+              <th>In Links</th>
+              <th>Posisi</th>
+              <th>Klik</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="pagesTableBody">
+            <tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:24px;">Memuat data halaman...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 3: KEYWORD GAPS -->
+    <div id="tab-gaps" class="tab-content" style="display:none;">
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Skor</th>
+              <th>Keyword / Query</th>
+              <th>Target URL</th>
+              <th>Posisi</th>
+              <th>Impresi</th>
+              <th>CTR</th>
+              <th>Missing In</th>
+            </tr>
+          </thead>
+          <tbody id="gapsTableBody">
+            <tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:24px;">Memuat data keyword gap...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 4: RUN HISTORY -->
+    <div id="tab-history" class="tab-content" style="display:none;">
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp Run</th>
+              <th>Total URL</th>
+              <th>Terindeks</th>
+              <th>Bermasalah</th>
+              <th>Hal. 1</th>
+              <th>File Run</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:24px;">Memuat riwayat run...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div id="detailModal" class="modal-overlay">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeModal()">[X]</button>
+      <h3 id="modalTitle" style="word-break:break-all; font-family:var(--font-mono); margin-bottom:12px;">Detail Halaman</h3>
+      
+      <div class="section-title">Status Indeks & Crawl</div>
+      <div id="modalIndexSection" class="code-block">-</div>
+
+      <div class="section-title">Audit On-Page</div>
+      <div id="modalAuditSection" class="code-block">-</div>
+
+      <div class="section-title">Keyword Gaps Halaman Ini</div>
+      <div id="modalGapsSection" class="code-block">-</div>
+    </div>
+  </div>
+
+  <script>
+    // Inisialisasi token dari URL query atau cookie
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token') || urlParams.get('t') || '';
+
+    let sitesData = [];
+    let currentSite = null;
+    let pagesData = [];
+    let gapsData = [];
+    let historyData = [];
+    let activePollInterval = null;
+
+    function getHeaders() {
+      const headers = { 'Accept': 'application/json' };
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+        headers['X-Auth-Token'] = token;
+      }
+      return headers;
+    }
+
+    async function apiFetch(url, options = {}) {
+      options.headers = Object.assign({}, getHeaders(), options.headers || {});
+      const res = await fetch(url, options);
+      if (res.status === 401) {
+        alert("[ERR] Akses ditolak: Token autentikasi diperlukan atau tidak valid.");
+        throw new Error("unauthorized");
+      }
+      return res;
+    }
+
+    async function init() {
+      try {
+        const res = await apiFetch('/api/sites');
+        if (!res.ok) throw new Error("Gagal mengambil daftar situs");
+        sitesData = await res.json();
+        
+        const select = document.getElementById('siteSelect');
+        select.innerHTML = '';
+        if (!sitesData || sitesData.length === 0) {
+          select.innerHTML = '<option value="">(Tidak ada situs di config)</option>';
+          return;
+        }
+
+        sitesData.forEach((s, idx) => {
+          const opt = document.createElement('option');
+          opt.value = s.name;
+          opt.textContent = s.name + ' (' + s.base_url + ')';
+          select.appendChild(opt);
+        });
+
+        currentSite = sitesData[0].name;
+        select.onchange = (e) => {
+          currentSite = e.target.value;
+          loadSiteData();
+        };
+
+        loadSiteData();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function loadSiteData() {
+      if (!currentSite) return;
+      loadOverview();
+      loadPages();
+      loadGaps();
+      loadHistory();
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+
+      const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.textContent.toLowerCase().includes(tabId));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const target = document.getElementById('tab-' + tabId);
+      if (target) target.style.display = 'block';
+    }
+
+    function renderBadge(status) {
+      if (!status) return '<span class="badge badge-gray">[NONE]</span>';
+      const s = status.toLowerCase();
+      if (s === 'indexed' || s === 'pass' || s === 'ok') return '<span class="badge badge-ok">[OK]</span>';
+      if (s.includes('crawled') || s.includes('warn')) return '<span class="badge badge-warn">[WARN]</span>';
+      if (s.includes('discovered') || s.includes('fail') || s.includes('error')) return '<span class="badge badge-err">[ERR]</span>';
+      return '<span class="badge badge-info">[' + status.toUpperCase() + ']</span>';
+    }
+
+    async function loadOverview() {
+      const site = sitesData.find(s => s.name === currentSite);
+      if (!site) return;
+
+      document.getElementById('infoBaseURL').textContent = site.base_url || '-';
+      document.getElementById('infoGSCProperty').textContent = site.gsc_property || '-';
+      document.getElementById('infoLastRun').textContent = site.last_run ? new Date(site.last_run).toLocaleString('id-ID') : 'Belum pernah di-run';
+
+      document.getElementById('statTotalPages').textContent = site.total_pages || 0;
+      document.getElementById('statIndexedPages').textContent = site.indexed_pages || 0;
+      document.getElementById('statIssuesCount').textContent = site.issues_count || 0;
+
+      const pct = site.total_pages > 0 ? Math.round((site.indexed_pages / site.total_pages) * 100) : 0;
+      document.getElementById('statIndexedPct').textContent = pct + '% dari total halaman';
+    }
+
+    async function loadPages() {
+      try {
+        const res = await apiFetch(`/api/sites/${encodeURIComponent(currentSite)}/pages`);
+        if (!res.ok) return;
+        pagesData = await res.json() || [];
+        filterPages();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function filterPages() {
+      const q = (document.getElementById('pageSearchInput').value || '').toLowerCase();
+      const statusFilter = document.getElementById('statusFilterSelect').value;
+      const tbody = document.getElementById('pagesTableBody');
+      tbody.innerHTML = '';
+
+      const filtered = pagesData.filter(p => {
+        const matchesQ = !q || (p.url && p.url.toLowerCase().includes(q)) || (p.path && p.path.toLowerCase().includes(q)) || (p.crawl && p.crawl.title && p.crawl.title.toLowerCase().includes(q));
+        if (!matchesQ) return false;
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'error') {
+          return (p.crawl && p.crawl.http_status !== 200) || (p.audit && p.audit.length > 0) || (p.index && p.index.status !== 'indexed');
+        }
+        return p.index && p.index.status === statusFilter;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:24px;">Tidak ada data yang cocok dengan filter.</td></tr>';
+        return;
+      }
+
+      filtered.forEach((p, idx) => {
+        const tr = document.createElement('tr');
+        const st = p.index ? p.index.status : 'uninspected';
+        const httpStatus = p.crawl ? p.crawl.http_status : '-';
+        const inLinks = p.internal_links_in !== undefined ? p.internal_links_in : '-';
+        const pos = (p.perf && p.perf.position > 0) ? p.perf.position.toFixed(1) : '-';
+        const clicks = p.perf ? p.perf.clicks : '-';
+        const title = (p.crawl && p.crawl.title) ? p.crawl.title : '';
+
+        tr.innerHTML = `
+          <td>${renderBadge(st)}</td>
+          <td>
+            <div style="font-weight:600; font-family:var(--font-mono);">${escapeHTML(p.path || p.url)}</div>
+            <div style="color:var(--text-muted); font-size:12px;">${escapeHTML(title)}</div>
+          </td>
+          <td><span class="badge ${httpStatus === 200 ? 'badge-ok' : 'badge-err'}">${httpStatus}</span></td>
+          <td>${inLinks}</td>
+          <td>${pos}</td>
+          <td>${clicks}</td>
+          <td><button onclick="viewPageDetail(${idx})" style="padding:3px 8px; font-size:11px;">[DETAIL]</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function viewPageDetail(filteredIndex) {
+      const q = (document.getElementById('pageSearchInput').value || '').toLowerCase();
+      const statusFilter = document.getElementById('statusFilterSelect').value;
+      const filtered = pagesData.filter(p => {
+        const matchesQ = !q || (p.url && p.url.toLowerCase().includes(q)) || (p.path && p.path.toLowerCase().includes(q)) || (p.crawl && p.crawl.title && p.crawl.title.toLowerCase().includes(q));
+        if (!matchesQ) return false;
+        if (statusFilter === 'all') return true;
+        return p.index && p.index.status === statusFilter;
+      });
+
+      const p = filtered[filteredIndex];
+      if (!p) return;
+
+      document.getElementById('modalTitle').textContent = p.url;
+      document.getElementById('modalIndexSection').textContent = p.index ? JSON.stringify(p.index, null, 2) : "Belum diinspeksi ke Google Search Console.";
+      document.getElementById('modalAuditSection').textContent = (p.audit && p.audit.length > 0) ? JSON.stringify(p.audit, null, 2) : "[OK] Tidak ditemukan masalah on-page.";
+      document.getElementById('modalGapsSection').textContent = (p.gaps && p.gaps.length > 0) ? JSON.stringify(p.gaps, null, 2) : "Tidak ada keyword gap untuk halaman ini.";
+
+      document.getElementById('detailModal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('detailModal').classList.remove('open');
+    }
+
+    async function loadGaps() {
+      try {
+        const res = await apiFetch(`/api/sites/${encodeURIComponent(currentSite)}/gaps`);
+        if (!res.ok) return;
+        gapsData = await res.json() || [];
+        document.getElementById('statGapsCount').textContent = gapsData.length;
+
+        const tbody = document.getElementById('gapsTableBody');
+        tbody.innerHTML = '';
+        if (gapsData.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:24px;">Tidak ada keyword gap terdeteksi.</td></tr>';
+          return;
+        }
+
+        gapsData.forEach(g => {
+          const tr = document.createElement('tr');
+          const missing = [];
+          if (!g.in_title) missing.push('title');
+          if (!g.in_meta) missing.push('meta');
+          if (!g.in_h1) missing.push('h1');
+          if (!g.in_h2h3) missing.push('h2h3');
+          if (!g.in_body) missing.push('body');
+
+          tr.innerHTML = `
+            <td><span class="badge badge-p1">${g.score ? g.score.toFixed(0) : '0'}</span></td>
+            <td style="font-weight:600; font-family:var(--font-mono);">${escapeHTML(g.query || '')}</td>
+            <td style="font-size:12px;">${escapeHTML(g.target_url || '')}</td>
+            <td>${g.position ? g.position.toFixed(1) : '-'}</td>
+            <td>${g.impressions || 0}</td>
+            <td>${g.ctr ? (g.ctr * 100).toFixed(1) + '%' : '0%'}</td>
+            <td style="color:var(--warning); font-family:var(--font-mono); font-size:11px;">${missing.join(', ') || '-'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function loadHistory() {
+      try {
+        const res = await apiFetch(`/api/sites/${encodeURIComponent(currentSite)}/runs`);
+        if (!res.ok) return;
+        historyData = await res.json() || [];
+        const tbody = document.getElementById('historyTableBody');
+        tbody.innerHTML = '';
+        if (historyData.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:24px;">Belum ada riwayat run yang tersimpan.</td></tr>';
+          return;
+        }
+
+        historyData.reverse().forEach(runFile => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="font-family:var(--font-mono);">${escapeHTML(runFile.replace('.json', ''))}</td>
+            <td>-</td>
+            <td>-</td>
+            <td>-</td>
+            <td>-</td>
+            <td><span class="badge badge-gray">${escapeHTML(runFile)}</span></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function triggerRun() {
+      if (!currentSite) return;
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true;
+
+      try {
+        const res = await apiFetch(`/api/sites/${encodeURIComponent(currentSite)}/run`, {
+          method: 'POST'
+        });
+        if (res.status === 409) {
+          alert("[WARN] Run sedang berlangsung untuk situs ini. Mohon tunggu proses selesai.");
+          btn.disabled = false;
+          return;
+        }
+        if (!res.ok) {
+          alert("[ERR] Gagal memicu run.");
+          btn.disabled = false;
+          return;
+        }
+
+        const data = await res.json();
+        startProgressPolling(data.run_id);
+      } catch (err) {
+        console.error(err);
+        btn.disabled = false;
+      }
+    }
+
+    function startProgressPolling(runId) {
+      const banner = document.getElementById('progressBanner');
+      const title = document.getElementById('progressTitle');
+      const fill = document.getElementById('progressBarFill');
+      const pctLabel = document.getElementById('progressPercent');
+      const log = document.getElementById('progressLog');
+      const btn = document.getElementById('runBtn');
+
+      banner.classList.add('active');
+      btn.disabled = true;
+
+      if (activePollInterval) clearInterval(activePollInterval);
+
+      activePollInterval = setInterval(async () => {
+        try {
+          const res = await apiFetch(`/api/runs/${encodeURIComponent(runId)}`);
+          if (!res.ok) return;
+          const job = await res.json();
+
+          let pct = 0;
+          if (job.total > 0) {
+            pct = Math.min(100, Math.round((job.current / job.total) * 100));
+          } else if (job.status === 'completed') {
+            pct = 100;
+          }
+
+          fill.style.width = pct + '%';
+          pctLabel.textContent = pct + '%';
+          title.textContent = `[${job.status.toUpperCase()}] Langkah: ${job.step} (${job.current}/${job.total})`;
+          log.textContent = job.message || `Sedang memproses...`;
+
+          if (job.status === 'completed' || job.status === 'failed') {
+            clearInterval(activePollInterval);
+            activePollInterval = null;
+            btn.disabled = false;
+
+            if (job.status === 'completed') {
+              title.textContent = `[COMPLETED] Pipeline Sukses Selesai.`;
+              fill.style.width = '100%';
+              pctLabel.textContent = '100%';
+              setTimeout(() => {
+                banner.classList.remove('active');
+                init(); // Refresh semua data
+              }, 2500);
+            } else {
+              title.textContent = `[FAILED] Terjadi Kendala: ${job.error}`;
+              fill.style.background = 'var(--danger)';
+            }
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }, 1000);
+    }
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>

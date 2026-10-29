@@ -45,6 +45,7 @@ Perintah tersedia:
   report    tampilkan laporan SEO komprehensif beserta perbandingan (diff)
   run       eksekusi pipeline penuh: discover -> crawl -> inspect -> perf -> gap -> report
   submit    kirim sitemap ke GSC, ping IndexNow, dan Google Indexing API
+  serve     jalankan dashboard web lokal terpadu (UI & REST API)
   indexnow-key buat kunci autentikasi baru untuk protokol IndexNow
   help      tampilkan bantuan ini
 
@@ -112,6 +113,8 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 	case "indexnow-key":
 		return indexnowKeyCmd(rest, stdout, stderr)
 	case "serve":
+		return serveCmd(rest, stdout, stderr)
+	case "notify":
 		fmt.Fprintf(stderr, "perintah %q belum tersedia\n", cmd)
 		return 1
 	default:

@@ -320,22 +320,22 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 2B dan 2D lulus.
 
 **Task**
-- [ ] `serve.go` + `web/index.html` (`embed`, `html/template`, JS vanilla) (9.9)
-- [ ] Endpoint sesuai 9.9, run async + polling progres
-- [ ] Token acak dan bind `127.0.0.1` default
+- [x] `serve.go` + `web/index.html` (`embed`, `html/template`, JS vanilla) (9.9)
+- [x] Endpoint sesuai 9.9, run async + polling progres
+- [x] Token acak dan bind `127.0.0.1` default
 
 **Test**
-- [ ] Default bind loopback; `--addr` non-loopback tanpa token → ditolak
-- [ ] Request tanpa token ke endpoint → 401
-- [ ] **SSRF:** tidak ada endpoint yang menerima URL bebas; nama site di luar config → 404
-- [ ] `POST /run` → `GET /api/runs/{id}` menunjukkan progres n/N lalu selesai
-- [ ] Output HTML ter-escape (XSS dari judul halaman)
-- [ ] `-race` pada state run bersama
-- [ ] **Manual:** buka dashboard, filter status, buka detail halaman, picu run
+- [x] Default bind loopback; `--addr` non-loopback tanpa token → ditolak
+- [x] Request tanpa token ke endpoint → 401
+- [x] **SSRF:** tidak ada endpoint yang menerima URL bebas; nama site di luar config → 404
+- [x] `POST /run` → `GET /api/runs/{id}` menunjukkan progres n/N lalu selesai
+- [x] Output HTML ter-escape (XSS dari judul halaman)
+- [x] `-race` pada state run bersama
+- [x] **Manual:** buka dashboard, filter status, buka detail halaman, picu run
 
-**Verifikasi:** Gate Standar.
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + manual live `seo-boost.exe serve` dengan token auth.
 **Definition of Done:** dashboard lokal bisa memicu run dan menampilkan hasil.
-**Gate lulus:** [ ] ______
+**Gate lulus:** [x] 2026-10-29 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live serve dashboard sukses)
 
 ---
 
