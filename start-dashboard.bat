@@ -16,3 +16,4 @@ if not exist "seo-boost.exe" (
 
 .\seo-boost.exe serve --open
 pause
+

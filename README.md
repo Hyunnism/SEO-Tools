@@ -227,6 +227,52 @@ Berikut adalah struktur lengkap file konfigurasi `config.json`:
 
 ---
 
+### Cara Mengatur Website: Single-Site vs Multi-Site
+
+Anda bebas menggunakan tools ini untuk satu website saja atau mengelola puluhan website sekaligus:
+
+#### Opsi A: Satu Website (Single-Site)
+Cukup daftarkan 1 objek website di dalam array `"sites"`:
+```json
+"sites": [
+  {
+    "name": "my-blog",
+    "gsc_property": "sc-domain:domainanda.com",
+    "base_url": "https://domainanda.com",
+    "sitemaps": ["https://domainanda.com/sitemap.xml"],
+    "exclude_paths": ["/admin", "/draft/"],
+    "priority_paths": ["/", "/artikel/"]
+  }
+]
+```
+
+#### Opsi B: Banyak Website Sekaligus (Multi-Site)
+Tambahkan beberapa objek website ke dalam array `"sites"`:
+```json
+"sites": [
+  {
+    "name": "toko-online",
+    "gsc_property": "sc-domain:tokosaya.com",
+    "base_url": "https://tokosaya.com",
+    "sitemaps": ["https://tokosaya.com/sitemap.xml"]
+  },
+  {
+    "name": "blog-pribadi",
+    "gsc_property": "https://blogpribadi.com/",
+    "base_url": "https://blogpribadi.com",
+    "sitemaps": ["https://blogpribadi.com/sitemap.xml"]
+  }
+]
+```
+
+**Bagaimana cara kerjanya jika ada banyak situs?**
+- **Di Web Dashboard (`serve`)**: Muncul menu dropdown pilihan situs di pojok kiri atas. Anda dapat berpindah dan memantau status tiap website dengan sekali klik.
+- **Di Terminal CLI (`run`)**:
+  - Audit situs tertentu: `.\seo-boost.exe run --site toko-online`
+  - Audit semua situs berurutan: `.\seo-boost.exe run --site all`
+
+---
+
 ## 7. Referensi Perintah CLI
 
 ### A. Diagnosa Sistem (`doctor`)
