@@ -12,6 +12,7 @@ import (
 )
 
 // ExtractHTML mengekstrak elemen-elemen SEO on-page dan mengumpulkan internal/external links.
+// ponytail: menggunakan x/net/html parser standar Go; upgrade ke tokenizer HTML mandiri jika ingin zero external dependency murni.
 func ExtractHTML(r io.Reader, pageURL string) (*model.CrawlInfo, []string, error) {
 	doc, err := html.Parse(r)
 	if err != nil {

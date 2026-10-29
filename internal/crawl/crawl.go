@@ -37,6 +37,8 @@ type Crawler struct {
 	httpClient *http.Client
 }
 
+// NewCrawler membuat crawler worker pool baru.
+// ponytail: crawler HTML mentah mendeteksi ThinHTML; upgrade ke headless Chrome bila perlu eksekusi JS dinamis.
 func NewCrawler(cfg Config, hc *http.Client) *Crawler {
 	if cfg.Concurrency <= 0 {
 		cfg.Concurrency = DefaultConcurrency

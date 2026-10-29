@@ -98,6 +98,7 @@ func DetermineCategory(pos, impressions, ctr float64, match model.MatchLevel, mi
 }
 
 // AnalyzeKeywordGap menganalisis kesenjangan kata kunci untuk 1 query terhadap 1 halaman.
+// ponytail: pencocokan kata harfiah dan stopword daftar tetap; upgrade ke stemmer/suffix stripper bila perlu pemahaman imbuhan.
 func AnalyzeKeywordGap(queryPerf model.QueryPerf, page *model.Page, customStopwords []string, minImpressions int) model.QueryGap {
 	gap := model.QueryGap{
 		QueryPerf: queryPerf,

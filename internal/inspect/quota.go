@@ -25,6 +25,8 @@ type QuotaManager struct {
 	loc     *time.Location
 }
 
+// NewQuotaManager membuat pengelola kuota harian inspeksi GSC.
+// ponytail: kuota dilacak lokal per hari Pacific Time; fallback ke HTTP 429 bila ada pemakaian kuota di luar tool ini.
 func NewQuotaManager(dataDir string, clock Clock) *QuotaManager {
 	if clock == nil {
 		clock = time.Now

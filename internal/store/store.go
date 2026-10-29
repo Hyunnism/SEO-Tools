@@ -26,6 +26,8 @@ type PagesEnvelope struct {
 	Pages     []*model.Page `json:"pages"`
 }
 
+// Store mengelola penyimpanan data situs ke berkas JSON atomik di direktori data/.
+// ponytail: penyimpanan JSON file atomik cukup untuk < 50.000 URL; upgrade ke modernc.org/sqlite di balik interface Store bila data membesar.
 type Store struct {
 	dataDir string
 	mu      sync.RWMutex
