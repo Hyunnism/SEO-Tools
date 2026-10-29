@@ -12,11 +12,21 @@ import (
 )
 
 type Config struct {
-	ServiceAccountFile string   `json:"service_account_file"`
-	DataDir            string   `json:"data_dir"`
-	Defaults           Defaults `json:"defaults"`
-	Sites              []Site   `json:"sites"`
-	Notify             Notify   `json:"notify"`
+	ServiceAccountFile string               `json:"service_account_file"`
+	DataDir            string               `json:"data_dir"`
+	Defaults           Defaults             `json:"defaults"`
+	GoogleIndexing     GoogleIndexingConfig `json:"google_indexing"`
+	Sites              []Site               `json:"sites"`
+	Notify             Notify               `json:"notify"`
+}
+
+type GoogleIndexingConfig struct {
+	Enabled                   bool   `json:"enabled"`
+	Mode                      string `json:"mode"`                          // safe | aggressive
+	DailyCap                  int    `json:"daily_cap"`                     // default 50 di safe, maks 190 di aggressive, hard-clamp 200
+	ResubmitCooldownDays      int    `json:"resubmit_cooldown_days"`        // default 7
+	MaxSendsPerContentVersion int    `json:"max_sends_per_content_version"` // default 3
+	SendDeleted               bool   `json:"send_deleted"`
 }
 
 type Defaults struct {
@@ -33,13 +43,14 @@ type Defaults struct {
 }
 
 type Site struct {
-	Name          string   `json:"name"`
-	GSCProperty   string   `json:"gsc_property"`
-	BaseURL       string   `json:"base_url"`
-	Sitemaps      []string `json:"sitemaps"`
-	ExcludePaths  []string `json:"exclude_paths"`
-	PriorityPaths []string `json:"priority_paths"`
-	IndexNowKey   string   `json:"indexnow_key"`
+	Name           string                `json:"name"`
+	GSCProperty    string                `json:"gsc_property"`
+	BaseURL        string                `json:"base_url"`
+	Sitemaps       []string              `json:"sitemaps"`
+	ExcludePaths   []string              `json:"exclude_paths"`
+	PriorityPaths  []string              `json:"priority_paths"`
+	IndexNowKey    string                `json:"indexnow_key"`
+	GoogleIndexing *GoogleIndexingConfig `json:"google_indexing,omitempty"`
 }
 
 type Notify struct {
@@ -100,6 +111,42 @@ func (c *Config) applyDefaults() {
 	setInt(&d.InspectDailyBudget, 1800)
 	setInt(&d.ReinspectAfterDays, 7)
 	setInt(&d.PerfDays, 28)
+
+	// Defaults untuk Google Indexing API
+	if c.GoogleIndexing.DailyCap <= 0 {
+		c.GoogleIndexing.DailyCap = 50
+	}
+	if c.GoogleIndexing.DailyCap > 200 {
+		c.GoogleIndexing.DailyCap = 200 // hard-clamp 200 (kuota Google)
+	}
+	if c.GoogleIndexing.ResubmitCooldownDays <= 0 {
+		c.GoogleIndexing.ResubmitCooldownDays = 7
+	}
+	if c.GoogleIndexing.MaxSendsPerContentVersion <= 0 {
+		c.GoogleIndexing.MaxSendsPerContentVersion = 3
+	}
+}
+
+// EffectiveGoogleIndexing mengembalikan konfigurasi Google Indexing untuk suatu site,
+// memprioritaskan konfigurasi site jika ada, atau fallback ke level config global.
+func (c *Config) EffectiveGoogleIndexing(site *Site) GoogleIndexingConfig {
+	cfg := c.GoogleIndexing
+	if site != nil && site.GoogleIndexing != nil {
+		cfg = *site.GoogleIndexing
+	}
+	if cfg.DailyCap <= 0 {
+		cfg.DailyCap = 50
+	}
+	if cfg.DailyCap > 200 {
+		cfg.DailyCap = 200
+	}
+	if cfg.ResubmitCooldownDays <= 0 {
+		cfg.ResubmitCooldownDays = 7
+	}
+	if cfg.MaxSendsPerContentVersion <= 0 {
+		cfg.MaxSendsPerContentVersion = 3
+	}
+	return cfg
 }
 
 func (c *Config) validate() error {

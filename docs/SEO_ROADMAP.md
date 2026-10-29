@@ -37,7 +37,7 @@ flowchart LR
 | 1D Analyze, Store, Report | 1–2 hari | ✅ | 2026-10-29 |
 | 1E Integrasi MVP | 0,5–1 hari | ✅ | 2026-10-29 |
 | 2A Submit | 1 hari | ✅ | 2026-10-29 |
-| 2B Indexing API | 1 hari | ⬜ | |
+| 2B Indexing API | 1 hari | ✅ | 2026-10-29 |
 | 2C Riwayat & Format | 1 hari | ⬜ | |
 | 2D Otomasi | 0,5 hari | ⬜ | |
 | 3A Serve | 2–3 hari | ⬜ | |
@@ -249,23 +249,23 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 2A lulus.
 
 **Task**
-- [ ] `submit --google-indexing` mode aman (9.7.3): `daily_cap` default 50, hanya URL 200 tanpa `noindex`
-- [ ] `--aggressive` (9.7.4): antrian prioritas, cooldown, maks 3 kirim per versi konten, `URL_DELETED`
-- [ ] `indexing.json` + pengukuran selang kirim → `lastCrawlTime` berikutnya
-- [ ] Peringatan kebijakan dicetak sekali per run dan dicatat di laporan
+- [x] `submit --google-indexing` mode aman (9.7.3): `daily_cap` default 50, hanya URL 200 tanpa `noindex`
+- [x] `--aggressive` (9.7.4): antrian prioritas, cooldown, maks 3 kirim per versi konten, `URL_DELETED`
+- [x] `indexing.json` + pengukuran selang kirim → `lastCrawlTime` berikutnya
+- [x] Peringatan kebijakan dicetak sekali per run dan dicatat di laporan
 
 **Test**
-- [ ] Mode aman tidak jalan bila hanya salah satu dari `enabled` atau `--google-indexing` aktif
-- [ ] `daily_cap` dihormati dan di-clamp ke 200 walau config lebih besar
-- [ ] Antrian agresif: urutan prioritas 1–6 benar
-- [ ] Cooldown 7 hari; kiriman ke-4 untuk hash yang sama ditolak; `crawled_not_indexed` hanya dikirim bila konten berubah
-- [ ] `403`/`429` → berhenti total
-- [ ] URL `noindex`/non-200/canonical lain tidak pernah dikirim
-- [ ] Peringatan muncul tepat sekali
+- [x] Mode aman tidak jalan bila hanya salah satu dari `enabled` atau `--google-indexing` aktif
+- [x] `daily_cap` dihormati dan di-clamp ke 200 walau config lebih besar
+- [x] Antrian agresif: urutan prioritas 1–6 benar
+- [x] Cooldown 7 hari; kiriman ke-4 untuk hash yang sama ditolak; `crawled_not_indexed` hanya dikirim bila konten berubah
+- [x] `403`/`429` → berhenti total
+- [x] URL `noindex`/non-200/canonical lain tidak pernah dikirim
+- [x] Peringatan muncul tepat sekali
 
-**Verifikasi:** Gate Standar.
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + manual live `seo-boost submit --site awanverse --google-indexing --aggressive --dry-run`.
 **Definition of Done:** semua pengaman 9.7.3/9.7.4 terbukti oleh test.
-**Gate lulus:** [ ] ______
+**Gate lulus:** [x] 2026-10-29 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live awanverse sukses)
 
 ---
 

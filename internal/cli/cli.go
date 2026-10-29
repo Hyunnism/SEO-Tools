@@ -44,7 +44,7 @@ Perintah tersedia:
   gap       analisis peluang keyword gap antara Search Analytics dan on-page
   report    tampilkan laporan SEO komprehensif beserta perbandingan (diff)
   run       eksekusi pipeline penuh: discover -> crawl -> inspect -> perf -> gap -> report
-  submit    kirim sitemap ke Google Search Console dan ping IndexNow
+  submit    kirim sitemap ke GSC, ping IndexNow, dan Google Indexing API
   indexnow-key buat kunci autentikasi baru untuk protokol IndexNow
   help      tampilkan bantuan ini
 

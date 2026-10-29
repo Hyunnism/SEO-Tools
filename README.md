@@ -133,6 +133,12 @@ Anda juga dapat menjalankan tahapan secara terpisah sesuai kebutuhan:
 
   # Kirim URL baru/berubah ke IndexNow (Bing, Yandex, Seznam)
   ./seo-boost submit --site portfolio --indexnow
+
+  # Kirim URL ke Google Indexing API (fitur opt-in dua kunci, mode aman)
+  ./seo-boost submit --site portfolio --google-indexing
+
+  # Simulasi antrean Google Indexing API mode agresif
+  ./seo-boost submit --site portfolio --google-indexing --aggressive --dry-run
   ```
 
 ---

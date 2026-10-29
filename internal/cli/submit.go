@@ -15,6 +15,7 @@ import (
 	"seo-boost/internal/config"
 	"seo-boost/internal/google"
 	"seo-boost/internal/gsc"
+	"seo-boost/internal/indexing"
 	"seo-boost/internal/indexnow"
 	"seo-boost/internal/model"
 	"seo-boost/internal/sitemap"
@@ -52,15 +53,21 @@ func submitCmd(args []string, stdout, stderr io.Writer) int {
 
 	var flagGSC bool
 	var flagIndexNow bool
+	var flagGoogleIndexing bool
+	var flagAggressive bool
 	var flagDryRun bool
 	var flagAll bool
 	var flagKey string
+	var flagDailyCap int
 
 	fs.BoolVar(&flagGSC, "gsc", false, "submit sitemap ke Google Search Console")
 	fs.BoolVar(&flagIndexNow, "indexnow", false, "ping URL baru/berubah ke IndexNow")
+	fs.BoolVar(&flagGoogleIndexing, "google-indexing", false, "submit URL ke Google Indexing API (opt-in dua kunci)")
+	fs.BoolVar(&flagAggressive, "aggressive", false, "aktifkan mode agresif Google Indexing API")
 	fs.BoolVar(&flagDryRun, "dry-run", false, "simulasikan pengiriman tanpa memanggil API eksternal")
 	fs.BoolVar(&flagAll, "all", false, "kirim seluruh URL valid (bukan hanya yang baru/berubah)")
 	fs.StringVar(&flagKey, "key", "", "override kunci IndexNow dari config")
+	fs.IntVar(&flagDailyCap, "daily-cap", 0, "override daily_cap untuk Google Indexing API")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -69,8 +76,8 @@ func submitCmd(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// Jika pengguna tidak menentukan --gsc maupun --indexnow, default ke keduanya jika ada key, atau --gsc
-	if !flagGSC && !flagIndexNow {
+	// Jika pengguna tidak menentukan target, default ke --gsc
+	if !flagGSC && !flagIndexNow && !flagGoogleIndexing {
 		flagGSC = true
 	}
 
@@ -275,6 +282,131 @@ func submitCmd(args []string, stdout, stderr io.Writer) int {
 
 		fmt.Fprintf(stdout, "  [OK] [INDEXNOW] %s (Total: %d URL, Batches: %d, HTTP: %d)\n\n",
 			res.Message, res.TotalSubmitted, res.Batches, res.StatusCode)
+	}
+
+	// -------------------------------------------------------------------------
+	// 3. SUBMIT GOOGLE INDEXING API (Opt-in Dua Kunci)
+	// -------------------------------------------------------------------------
+	if flagGoogleIndexing {
+		fmt.Fprintf(stdout, "--- [GOOGLE INDEXING API] PENGIRIMAN NOTIFIKASI INDEXING ---\n")
+
+		idxCfg := c.EffectiveGoogleIndexing(site)
+		if flagAggressive {
+			idxCfg.Mode = "aggressive"
+		}
+		if flagDailyCap > 0 {
+			idxCfg.DailyCap = flagDailyCap
+		}
+		isAggressive := idxCfg.Mode == "aggressive"
+
+		// Validasi Dua Kunci (Two-Key Activation)
+		if !isAggressive && !idxCfg.Enabled {
+			fmt.Fprintf(stderr, "  [ERROR] Google Indexing API belum diaktifkan di konfigurasi (kunci 1 non-aktif).\n")
+			fmt.Fprintf(stderr, "          Fitur ini menerapkan aktivasi dua kunci (two-key activation) untuk mencegah pemanggilan tanpa sengaja.\n")
+			fmt.Fprintf(stderr, "          Tambahkan di config.json: \"google_indexing\": {\"enabled\": true}\n")
+			fmt.Fprintf(stderr, "          Atau gunakan mode agresif: seo-boost submit --site %s --google-indexing --aggressive\n\n", site.Name)
+			return 1
+		}
+
+		// Cetak peringatan kebijakan resmi Google tepat satu kali
+		fmt.Fprintln(stdout, indexing.PolicyWarning)
+		fmt.Fprintln(stdout)
+
+		st := store.NewStore(c.DataDir)
+		pages, _ := st.LoadPages(site.Name)
+		idxStore, err := indexing.LoadIndexingStore(c.DataDir, site.Name)
+		if err != nil {
+			log.Warn("gagal memuat indexing.json, membuat baru", "error", err)
+			idxStore = &indexing.SiteIndexingStore{Records: make(map[string]indexing.IndexingRecord)}
+		}
+
+		queue := indexing.BuildQueue(pages, idxStore, idxCfg, site.PriorityPaths, isAggressive, time.Now().UTC())
+
+		if len(queue) == 0 {
+			fmt.Fprintf(stdout, "  [INFO] Tidak ada URL yang memenuhi syarat pengiriman ke Google Indexing API saat ini.\n\n")
+		} else if flagDryRun {
+			fmt.Fprintf(stdout, "  [DRY RUN] [INDEXING] %d URL dijadwalkan untuk dikirim (Mode: %s, Daily Cap: %d):\n",
+				len(queue), idxCfg.Mode, idxCfg.DailyCap)
+			for i, item := range queue {
+				fmt.Fprintf(stdout, "    %2d. [P%d: %s] %s (%s)\n", i+1, item.Priority, item.Reason, item.URL, item.Type)
+			}
+			fmt.Fprintln(stdout)
+		} else {
+			var gOpts []google.ClientOption
+			gOpts = append(gOpts, google.WithLogger(log))
+			if defaultHTTPClient != nil {
+				gOpts = append(gOpts, google.WithHTTPClient(defaultHTTPClient))
+			}
+
+			gClient, gErr := google.NewClientFromFile(c.ServiceAccountFile, gOpts...)
+			if gErr != nil {
+				fmt.Fprintf(stderr, "  [ERROR] Inisialisasi Google client gagal: %v\n\n", gErr)
+				return 1
+			}
+
+			fmt.Fprintf(stdout, "  Mengirim %d URL ke Google Indexing API (Mode: %s)...\n", len(queue), idxCfg.Mode)
+			successCount := 0
+			failCount := 0
+			stopImmediate := false
+
+			for i, item := range queue {
+				if stopImmediate {
+					break
+				}
+				// Jeda kecil antar request (maks 180 req/menit)
+				if i > 0 {
+					time.Sleep(350 * time.Millisecond)
+				}
+
+				_, pubErr := indexing.PublishURL(ctx, gClient, item.URL, item.Type)
+				nowSent := time.Now().UTC()
+				if pubErr != nil {
+					failCount++
+					fmt.Fprintf(stderr, "    [-] [GAGAL] %s (%s): %v\n", item.URL, item.Type, pubErr)
+
+					// Fail-Fast: Henti total jika 403 atau 429
+					errStr := pubErr.Error()
+					if strings.Contains(errStr, "HTTP 403") {
+						fmt.Fprintf(stderr, "\n  [ERROR] [403 FORBIDDEN] Akun Service Account bukan Owner properti di GSC atau Web Search Indexing API belum diaktifkan di Google Cloud Console. Pengiriman dihentikan total.\n\n")
+						stopImmediate = true
+					} else if strings.Contains(errStr, "HTTP 429") {
+						fmt.Fprintf(stderr, "\n  [ERROR] [429 RATE LIMIT] Kuota harian/menit Google Indexing API terlampaui. Pengiriman dihentikan total.\n\n")
+						stopImmediate = true
+					}
+				} else {
+					successCount++
+					fmt.Fprintf(stdout, "    [+] [%s] %s\n", item.Type, item.URL)
+
+					// Catat riwayat pengiriman
+					prevRec := idxStore.Records[item.URL]
+					sendCount := prevRec.SendCount + 1
+					if prevRec.ContentHash != item.ContentHash {
+						sendCount = 1
+					}
+					idxStore.Records[item.URL] = indexing.IndexingRecord{
+						URL:         item.URL,
+						Type:        item.Type,
+						ContentHash: item.ContentHash,
+						SentAt:      nowSent,
+						HTTPStatus:  http.StatusOK,
+						SendCount:   sendCount,
+					}
+				}
+			}
+
+			// Simpan riwayat pengiriman secara atomik
+			_ = indexing.SaveIndexingStore(c.DataDir, site.Name, idxStore)
+
+			// Tampilkan laporan terukur
+			fmt.Fprintf(stdout, "\n  Ringkasan Pengiriman: %d Terkirim [OK], %d Gagal [WARN]\n", successCount, failCount)
+
+			// Hitung latensi crawl rata-rata
+			avgLatency, samples := indexing.CalculateAverageCrawlLatency(pages, idxStore)
+			if samples > 0 {
+				fmt.Fprintf(stdout, "  Hasil Terukur: Rata-rata selang kirim -> crawl Googlebot: %v (%d sampel)\n", avgLatency.Round(time.Minute), samples)
+			}
+			fmt.Fprintln(stdout)
+		}
 	}
 
 	return 0
