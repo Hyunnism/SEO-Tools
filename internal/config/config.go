@@ -149,11 +149,16 @@ func (c *Config) EffectiveGoogleIndexing(site *Site) GoogleIndexingConfig {
 	return cfg
 }
 
+// ValidateServiceAccount memeriksa ketersediaan dan validitas isi berkas Google Service Account.
+func (c *Config) ValidateServiceAccount() error {
+	return checkServiceAccount(c.ServiceAccountFile)
+}
+
 func (c *Config) validate() error {
 	var errs []error
 	add := func(f string, a ...any) { errs = append(errs, fmt.Errorf(f, a...)) }
 
-	if err := checkServiceAccount(c.ServiceAccountFile); err != nil {
+	if err := checkServiceAccountIfPresent(c.ServiceAccountFile); err != nil {
 		add("service_account_file: %v", err)
 	}
 	if c.Defaults.InspectDailyBudget < 1 || c.Defaults.InspectDailyBudget > 2000 {
@@ -183,6 +188,19 @@ func (c *Config) validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// checkServiceAccountIfPresent memeriksa validitas format Service Account jika berkasnya ada.
+// Jika berkas belum dibuat di disk, tidak dianggap fatal saat load konfigurasi agar
+// dashboard lokal dan crawler internal tetap dapat berjalan tanpa Google API.
+func checkServiceAccountIfPresent(path string) error {
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return checkServiceAccount(path)
 }
 
 func checkServiceAccount(path string) error {

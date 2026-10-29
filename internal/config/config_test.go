@@ -57,7 +57,6 @@ func TestLoad(t *testing.T) {
 		{"budget 2001", goodSA, cfgWith(`,"defaults":{"inspect_daily_budget":2001}`, okSite), "inspect_daily_budget"},
 		{"rpm 601", goodSA, cfgWith(`,"defaults":{"inspect_rpm":601}`, okSite), "inspect_rpm"},
 		{"tanpa site", goodSA, cfgWith(""), "minimal 1 site"},
-		{"sa tidak ada", "", cfgWith("", okSite), "service_account_file"},
 		{"sa bukan json", "bukan json", cfgWith("", okSite), "bukan JSON"},
 		{"sa tanpa client_email", `{"private_key":"k","token_uri":"u"}`, cfgWith("", okSite), "client_email"},
 		{"sa tanpa private_key", `{"client_email":"e","token_uri":"u"}`, cfgWith("", okSite), "private_key"},
@@ -137,5 +136,18 @@ func TestExampleConfigParses(t *testing.T) {
 	}
 	if _, err := Load(p); err != nil {
 		t.Fatalf("config.example.json harus lolos: %v", err)
+	}
+}
+
+func TestLoadWithoutServiceAccountFile(t *testing.T) {
+	// Memastikan config tetap dapat di-load jika file SA belum ada di disk,
+	// agar operasi non-GSC (web dashboard, crawler lokal) tetap dapat berjalan.
+	p := write(t, "", cfgWith("", okSite))
+	c, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load seharusnya berhasil walau SA belum ada di disk, dapat error: %v", err)
+	}
+	if err := c.ValidateServiceAccount(); err == nil {
+		t.Fatal("ValidateServiceAccount seharusnya mendeteksi file SA belum ada")
 	}
 }
