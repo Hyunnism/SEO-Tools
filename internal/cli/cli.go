@@ -43,6 +43,7 @@ Perintah tersedia:
   perf      tarik metrik performa pencarian (klik, impresi, posisi) dari GSC
   gap       analisis peluang keyword gap antara Search Analytics dan on-page
   report    tampilkan laporan SEO komprehensif beserta perbandingan (diff)
+  run       eksekusi pipeline penuh: discover -> crawl -> inspect -> perf -> gap -> report
   help      tampilkan bantuan ini
 
 Flag global: --config --site --format --out --verbose
@@ -102,7 +103,9 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return gapCmd(rest, stdout, stderr)
 	case "report":
 		return reportCmd(rest, stdout, stderr)
-	case "submit", "run", "serve", "indexnow-key":
+	case "run":
+		return runOrchestrator(rest, stdout, stderr)
+	case "submit", "serve", "indexnow-key":
 		fmt.Fprintf(stderr, "perintah %q belum tersedia\n", cmd)
 		return 1
 	default:

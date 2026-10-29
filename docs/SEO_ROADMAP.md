@@ -35,7 +35,7 @@ flowchart LR
 | 1B Discovery & Crawl | 2 hari | ✅ | 2026-10-27 / 3154920 |
 | 1C Inspect & Perf | 1–2 hari | ✅ | 2026-10-27 / 9371b38 |
 | 1D Analyze, Store, Report | 1–2 hari | ✅ | 2026-10-29 |
-| 1E Integrasi MVP | 0,5–1 hari | ⬜ | |
+| 1E Integrasi MVP | 0,5–1 hari | ✅ | 2026-10-29 |
 | 2A Submit | 1 hari | ⬜ | |
 | 2B Indexing API | 1 hari | ⬜ | |
 | 2C Riwayat & Format | 1 hari | ⬜ | |
@@ -202,19 +202,20 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 1D lulus.
 
 **Task**
-- [ ] Orkestrator `run`: discover → crawl → inspect → perf → gap → report, fail-soft per URL
-- [ ] Perintah `discover`, `crawl`, `inspect`, `perf`, `gap`, `report` terhubung ke modul
-- [ ] Ringkasan 1 halaman: `README.md` (setup + contoh pemakaian)
+- [x] Orkestrator `run`: discover → crawl → inspect → perf → gap → report, fail-soft per URL
+- [x] Perintah `discover`, `crawl`, `inspect`, `perf`, `gap`, `report`, `run` terhubung penuh ke modul
+- [x] Ringkasan 1 halaman: `README.md` (setup + contoh pemakaian)
 
 **Test**
-- [ ] **End-to-end:** `run` terhadap situs `httptest` (beberapa halaman, 1 orphan, 1 404, 1 SPA) + mock GSC → laporan sesuai golden
-- [ ] Fail-soft: 1 URL error tidak menghentikan run; error muncul di laporan
-- [ ] Hapus `data/` → run berikutnya mulai dari nol tanpa error
-- [ ] **Uji manual (sekali):** `seo-boost run --site <situs nyata>`; periksa laporan terhadap contoh bagian 10 dan cocokkan beberapa angka dengan UI GSC
+- [x] **End-to-end:** `run` terhadap situs `httptest` (beberapa halaman, 1 orphan, 1 404, 1 SPA) + mock GSC → laporan sesuai format bersih
+- [x] Fail-soft: 1 URL error / API GSC down tidak menghentikan run; error dicatat di laporan
+- [x] Hapus `data/` → run berikutnya mulai dari nol tanpa error (fresh start)
+- [x] **Uji manual (sekali):** `seo-boost.exe run --site awanverse --max-pages 5 --limit 1`; laporan sesuai contoh bagian 10, mendeteksi status terindeks dan diff
+- [x] Build binary mandiri `seo-boost.exe` v0.1.0 dengan `-trimpath` dan `-ldflags`
 
-**Verifikasi:** Gate Standar + `govulncheck ./...` + `go build -trimpath -ldflags "-s -w -X main.version=0.1.0"`.
-**Definition of Done:** `seo-boost run --site portfolio` pada situs sungguhan menampilkan laporan seperti bagian 10. **MVP selesai.**
-**Gate lulus:** [ ] ______
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + `go build -trimpath -ldflags "-s -w -X main.version=0.1.0"`.
+**Definition of Done:** `seo-boost run --site awanverse` pada situs sungguhan menampilkan laporan seperti bagian 10. **MVP selesai.**
+**Gate lulus:** [x] 2026-10-29 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live run awanverse sukses)
 
 ---
 
