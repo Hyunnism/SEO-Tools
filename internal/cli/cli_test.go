@@ -63,7 +63,7 @@ func TestUnknownCommand(t *testing.T) {
 }
 
 func TestNotYetAvailable(t *testing.T) {
-	code, _, errs := run("submit")
+	code, _, errs := run("serve")
 	if code != 1 || !strings.Contains(errs, "belum tersedia") {
 		t.Fatalf("code=%d err=%q", code, errs)
 	}

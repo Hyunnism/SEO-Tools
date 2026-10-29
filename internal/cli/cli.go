@@ -44,6 +44,8 @@ Perintah tersedia:
   gap       analisis peluang keyword gap antara Search Analytics dan on-page
   report    tampilkan laporan SEO komprehensif beserta perbandingan (diff)
   run       eksekusi pipeline penuh: discover -> crawl -> inspect -> perf -> gap -> report
+  submit    kirim sitemap ke Google Search Console dan ping IndexNow
+  indexnow-key buat kunci autentikasi baru untuk protokol IndexNow
   help      tampilkan bantuan ini
 
 Flag global: --config --site --format --out --verbose
@@ -105,7 +107,11 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return reportCmd(rest, stdout, stderr)
 	case "run":
 		return runOrchestrator(rest, stdout, stderr)
-	case "submit", "serve", "indexnow-key":
+	case "submit":
+		return submitCmd(rest, stdout, stderr)
+	case "indexnow-key":
+		return indexnowKeyCmd(rest, stdout, stderr)
+	case "serve":
 		fmt.Fprintf(stderr, "perintah %q belum tersedia\n", cmd)
 		return 1
 	default:

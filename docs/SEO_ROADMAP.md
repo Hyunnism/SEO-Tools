@@ -36,7 +36,7 @@ flowchart LR
 | 1C Inspect & Perf | 1–2 hari | ✅ | 2026-10-27 / 9371b38 |
 | 1D Analyze, Store, Report | 1–2 hari | ✅ | 2026-10-29 |
 | 1E Integrasi MVP | 0,5–1 hari | ✅ | 2026-10-29 |
-| 2A Submit | 1 hari | ⬜ | |
+| 2A Submit | 1 hari | ✅ | 2026-10-29 |
 | 2B Indexing API | 1 hari | ⬜ | |
 | 2C Riwayat & Format | 1 hari | ⬜ | |
 | 2D Otomasi | 0,5 hari | ⬜ | |
@@ -225,20 +225,21 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 1E lulus.
 
 **Task**
-- [ ] `submit --gsc` + status sitemap (`sitemaps.list`) (9.7.1)
-- [ ] `indexnow-key` (kunci acak `crypto/rand`) + `submit --indexnow` dengan verifikasi file kunci (9.7.2)
-- [ ] Hanya URL baru/berubah sejak run terakhir dikirim
+- [x] `submit --gsc` + status sitemap (`sitemaps.list`) (9.7.1)
+- [x] `indexnow-key` (kunci acak `crypto/rand`) + `submit --indexnow` dengan verifikasi file kunci (9.7.2)
+- [x] Hanya URL baru/berubah sejak run terakhir dikirim (dengan opsi `--all` untuk seluruh situs)
 
 **Test**
-- [ ] Mock `PUT sitemaps`: URL-encode `{site}`/`{feedpath}` benar, scope `webmasters` (bukan readonly), sukses 200/204
-- [ ] Kunci IndexNow: hex 8–128, acak berbeda tiap panggil
-- [ ] File kunci tak bisa diakses / isi beda → submit dibatalkan dengan pesan jelas
-- [ ] > 10.000 URL dipecah per request; 200/202 diterima; 403/422 → error kunci
-- [ ] Hanya URL berubah (lastmod/hash) yang masuk daftar
+- [x] Mock `PUT sitemaps`: URL-encode `{site}`/`{feedpath}` benar, scope `webmasters` (bukan readonly), sukses 200/204
+- [x] Kunci IndexNow: hex 8–128, acak berbeda tiap panggil
+- [x] File kunci tak bisa diakses / isi beda → submit dibatalkan dengan pesan jelas
+- [x] > 10.000 URL dipecah per request; 200/202 diterima; 403/422 → error kunci
+- [x] Hanya URL berubah/baru yang masuk daftar kirim
+- [x] `-race` pada modul gsc, indexnow, dan cli
 
-**Verifikasi:** Gate Standar.
-**Definition of Done:** `submit --gsc --indexnow` benar terhadap mock.
-**Gate lulus:** [ ] ______
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + manual live `seo-boost submit --site awanverse --gsc`.
+**Definition of Done:** `submit --gsc --indexnow` benar terhadap mock dan live API GSC.
+**Gate lulus:** [x] 2026-10-29 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live GSC sitemap awanverse sukses)
 
 ---
 

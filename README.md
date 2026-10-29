@@ -123,6 +123,17 @@ Anda juga dapat menjalankan tahapan secara terpisah sesuai kebutuhan:
   ./seo-boost report --site portfolio --format text
   ./seo-boost report --site portfolio --format json --out report.json
   ```
+- **Kirim Sitemap ke GSC & Ping IndexNow**:
+  ```bash
+  # Buat kunci verifikasi IndexNow
+  ./seo-boost indexnow-key
+
+  # Kirim sitemap ke Google Search Console
+  ./seo-boost submit --site portfolio --gsc
+
+  # Kirim URL baru/berubah ke IndexNow (Bing, Yandex, Seznam)
+  ./seo-boost submit --site portfolio --indexnow
+  ```
 
 ---
 
