@@ -18,6 +18,8 @@ import (
 
 	"seo-boost/internal/config"
 	"seo-boost/internal/google"
+	"seo-boost/internal/model"
+	"seo-boost/internal/store"
 )
 
 func run(args ...string) (int, string, string) {
@@ -61,7 +63,7 @@ func TestUnknownCommand(t *testing.T) {
 }
 
 func TestNotYetAvailable(t *testing.T) {
-	code, _, errs := run("gap")
+	code, _, errs := run("submit")
 	if code != 1 || !strings.Contains(errs, "belum tersedia") {
 		t.Fatalf("code=%d err=%q", code, errs)
 	}
@@ -410,3 +412,163 @@ func TestInspectAndPerfCmd(t *testing.T) {
 		t.Errorf("perf run output invalid: %s", out)
 	}
 }
+
+func TestGapAndReportCmd(t *testing.T) {
+	dir := t.TempDir()
+	dataDir := filepath.Join(dir, "data")
+
+	cfgContent := fmt.Sprintf(`{
+		"service_account_file": "./sa.json",
+		"data_dir": "%s",
+		"defaults": {
+			"inspect_rpm": 600,
+			"inspect_daily_budget": 50,
+			"perf_days": 28,
+			"stopwords": ["dan", "di", "ke", "dari"]
+		},
+		"sites": [
+			{
+				"name": "example",
+				"base_url": "https://example.com",
+				"gsc_property": "sc-domain:example.com"
+			}
+		]
+	}`, filepath.ToSlash(dataDir))
+
+	cfgPath := filepath.Join(dir, "config.json")
+	_ = os.WriteFile(cfgPath, []byte(cfgContent), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "sa.json"), []byte(`{"client_email":"a@b.com","private_key":"k","token_uri":"https://oauth2.googleapis.com/token"}`), 0o600)
+
+	st := store.NewStore(dataDir)
+
+	// Inisialisasi mock pages
+	initialPages := []*model.Page{
+		{
+			URL:  "https://example.com/artikel-1",
+			Path: "/artikel-1",
+			Crawl: &model.CrawlInfo{
+				Title:      "Panduan Belajar Pemrograman",
+				HTTPStatus: 200,
+				WordCount:  500,
+				Zones: model.Zones{
+					Title: "Panduan Belajar Pemrograman",
+					H1:    []string{"Belajar Pemrograman Pemula"},
+					Body:  []string{"artikel ini membahas dasar belajar pemrograman untuk pemula."},
+				},
+			},
+			Index: &model.IndexInfo{
+				Status:  model.StatusIndexed,
+				Verdict: "PASS",
+			},
+			Perf: &model.PagePerf{
+				Clicks:      25,
+				Impressions: 800,
+				Position:    6.5,
+				Queries: []model.QueryPerf{
+					{
+						Query:       "belajar pemrograman",
+						Clicks:      20,
+						Impressions: 500,
+						CTR:         0.04,
+						Position:    6.0,
+					},
+					{
+						Query:       "tutorial golang",
+						Clicks:      5,
+						Impressions: 300,
+						CTR:         0.016,
+						Position:    9.0,
+					},
+				},
+			},
+			Audit: []model.AuditIssue{
+				{
+					Code:     "title_short",
+					Severity: "warn",
+					Detail:   "Title terlalu pendek",
+				},
+			},
+		},
+	}
+
+	if err := st.SavePages("example", initialPages); err != nil {
+		t.Fatalf("failed to save initial pages: %v", err)
+	}
+
+	// 1. Test gap command (Text format)
+	code, out, errs := run("gap", "--config", cfgPath, "--site", "example", "--min-imp", "50")
+	if code != 0 {
+		t.Fatalf("gap failed code=%d err=%s out=%s", code, errs, out)
+	}
+	if !strings.Contains(out, "=== ANALISIS KEYWORD GAP (example) ===") {
+		t.Errorf("expected gap header in output: %s", out)
+	}
+	// Pastikan ada badge kategori
+	if !strings.Contains(out, "[BOOST]") && !strings.Contains(out, "[NEW_CONTENT]") && !strings.Contains(out, "[STRONG]") {
+		t.Errorf("expected gap category badge in output: %s", out)
+	}
+
+	// 2. Test gap command (JSON format)
+	code, out, errs = run("gap", "--config", cfgPath, "--site", "example", "--min-imp", "50", "--format", "json")
+	if code != 0 {
+		t.Fatalf("gap json failed code=%d err=%s out=%s", code, errs, out)
+	}
+	var gapEnvelope map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &gapEnvelope); err != nil {
+		t.Fatalf("gap JSON unmarshal failed: %v", err)
+	}
+	if gapEnvelope["schema"].(float64) != 1 {
+		t.Errorf("expected schema 1, got %v", gapEnvelope["schema"])
+	}
+
+	// 3. Test report command run 1 (tanpa diff)
+	code, out, errs = run("report", "--config", cfgPath, "--site", "example")
+	if code != 0 {
+		t.Fatalf("report 1 failed code=%d err=%s out=%s", code, errs, out)
+	}
+	if !strings.Contains(out, "SEO BOOST REPORT: example") || !strings.Contains(out, "--- RINGKASAN SITUS ---") {
+		t.Errorf("report output missing headers: %s", out)
+	}
+
+	// 4. Update pages untuk mensimulasikan perubahan (diff)
+	updatedPages := []*model.Page{
+		initialPages[0],
+		{
+			URL:  "https://example.com/artikel-baru",
+			Path: "/artikel-baru",
+			Index: &model.IndexInfo{
+				Status:  model.StatusIndexed,
+				Verdict: "PASS",
+			},
+			Perf: &model.PagePerf{
+				Clicks:      15,
+				Impressions: 400,
+				Position:    4.0,
+			},
+		},
+	}
+	_ = st.SavePages("example", updatedPages)
+
+	// 5. Test report command run 2 (harus mendeteksi diff: [+] Baru Terindeks)
+	code, out, errs = run("report", "--config", cfgPath, "--site", "example")
+	if code != 0 {
+		t.Fatalf("report 2 failed code=%d err=%s out=%s", code, errs, out)
+	}
+	if !strings.Contains(out, "--- PERUBAHAN STATUS & PERINGKAT (DIFF) ---") || !strings.Contains(out, "[+] Baru Terindeks") {
+		t.Errorf("expected diff in report 2: %s", out)
+	}
+
+	// 6. Test report command JSON
+	code, out, errs = run("report", "--config", cfgPath, "--site", "example", "--format", "json")
+	if code != 0 {
+		t.Fatalf("report json failed code=%d err=%s out=%s", code, errs, out)
+	}
+	var repEnvelope map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &repEnvelope); err != nil {
+		t.Fatalf("report JSON unmarshal failed: %v", err)
+	}
+	if repEnvelope["schema"].(float64) != 1 {
+		t.Errorf("expected schema 1 in report json, got %v", repEnvelope["schema"])
+	}
+}
+

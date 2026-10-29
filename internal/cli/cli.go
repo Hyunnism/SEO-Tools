@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,15 +15,19 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
+	"seo-boost/internal/analyze"
 	"seo-boost/internal/config"
 	"seo-boost/internal/crawl"
 	"seo-boost/internal/google"
 	"seo-boost/internal/inspect"
 	"seo-boost/internal/model"
 	"seo-boost/internal/perf"
+	"seo-boost/internal/report"
 	"seo-boost/internal/sitemap"
+	"seo-boost/internal/store"
 )
 
 const usage = `seo-boost - SEO automation tool
@@ -36,6 +41,8 @@ Perintah tersedia:
   crawl     rayapi halaman web dan audit on-page SEO
   inspect   periksa status crawl & index halaman dari Google Search Console
   perf      tarik metrik performa pencarian (klik, impresi, posisi) dari GSC
+  gap       analisis peluang keyword gap antara Search Analytics dan on-page
+  report    tampilkan laporan SEO komprehensif beserta perbandingan (diff)
   help      tampilkan bantuan ini
 
 Flag global: --config --site --format --out --verbose
@@ -91,7 +98,11 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return inspectCmd(rest, stdout, stderr)
 	case "perf":
 		return perfCmd(rest, stdout, stderr)
-	case "gap", "submit", "run", "report", "serve", "indexnow-key":
+	case "gap":
+		return gapCmd(rest, stdout, stderr)
+	case "report":
+		return reportCmd(rest, stdout, stderr)
+	case "submit", "run", "serve", "indexnow-key":
 		fmt.Fprintf(stderr, "perintah %q belum tersedia\n", cmd)
 		return 1
 	default:
@@ -571,6 +582,33 @@ func crawlCmd(args []string, stdout, stderr io.Writer) int {
 	resultStr := outBuf.String()
 	fmt.Fprint(stdout, resultStr)
 
+	// Simpan snapshot crawl & audit ke store
+	st := store.NewStore(c.DataDir)
+	existingPages, _ := st.LoadPages(site.Name)
+	pageMap := make(map[string]*model.Page)
+	for _, ep := range existingPages {
+		pageMap[ep.URL] = ep
+	}
+	for _, p := range pages {
+		if ep, ok := pageMap[p.URL]; ok {
+			ep.Path = p.Path
+			ep.InSitemap = p.InSitemap
+			ep.InternalIn = p.InternalIn
+			ep.Crawl = p.Crawl
+			ep.Audit = p.Audit
+		} else {
+			pageMap[p.URL] = p
+		}
+	}
+	var merged []*model.Page
+	for _, p := range pageMap {
+		merged = append(merged, p)
+	}
+	sort.Slice(merged, func(i, j int) bool {
+		return merged[i].URL < merged[j].URL
+	})
+	_ = st.SavePages(site.Name, merged)
+
 	if g.out != "" {
 		if err := os.WriteFile(g.out, []byte(resultStr), 0o644); err != nil {
 			fmt.Fprintf(stderr, "[GAGAL] Tulis file output %s: %v\n", g.out, err)
@@ -722,6 +760,7 @@ func inspectCmd(args []string, stdout, stderr io.Writer) int {
 
 	var outBuf bytes.Buffer
 	statusCounts := make(map[model.IndexStatus]int)
+	inspectedMap := make(map[string]*model.IndexInfo)
 
 	workerCfg := inspect.InspectWorkerConfig{
 		RPM:      rpm,
@@ -735,6 +774,7 @@ func inspectCmd(args []string, stdout, stderr io.Writer) int {
 			return
 		}
 		statusCounts[info.Status]++
+		inspectedMap[item.URL] = info
 
 		canonInfo := ""
 		if info.GoogleCanon != "" {
@@ -750,6 +790,32 @@ func inspectCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: %d  ", st, count)
 	}
 	fmt.Fprintln(stdout)
+
+	// Simpan snapshot status indeks ke store
+	if len(inspectedMap) > 0 {
+		st := store.NewStore(c.DataDir)
+		pages, _ := st.LoadPages(site.Name)
+		pageMap := make(map[string]*model.Page)
+		for _, p := range pages {
+			pageMap[p.URL] = p
+		}
+		for u, info := range inspectedMap {
+			p, ok := pageMap[u]
+			if !ok {
+				p = &model.Page{URL: u}
+				pageMap[u] = p
+			}
+			p.Index = info
+		}
+		var updatedPages []*model.Page
+		for _, p := range pageMap {
+			updatedPages = append(updatedPages, p)
+		}
+		sort.Slice(updatedPages, func(i, j int) bool {
+			return updatedPages[i].URL < updatedPages[j].URL
+		})
+		_ = st.SavePages(site.Name, updatedPages)
+	}
 
 	if batchErr != nil {
 		fmt.Fprintf(stderr, "\n[PERINGATAN] %v\n", batchErr)
@@ -882,12 +948,285 @@ func perfCmd(args []string, stdout, stderr io.Writer) int {
 	resultStr := outBuf.String()
 	fmt.Fprint(stdout, resultStr)
 
+	// Simpan snapshot performa ke store
+	st := store.NewStore(c.DataDir)
+	pages, _ := st.LoadPages(site.Name)
+	pageMap := make(map[string]*model.Page)
+	for _, p := range pages {
+		pageMap[p.URL] = p
+	}
+	for u, pPerf := range perfMap {
+		p, ok := pageMap[u]
+		if !ok {
+			p = &model.Page{URL: u}
+			pageMap[u] = p
+		}
+		p.Perf = pPerf
+	}
+	var updatedPages []*model.Page
+	for _, p := range pageMap {
+		updatedPages = append(updatedPages, p)
+	}
+	sort.Slice(updatedPages, func(i, j int) bool {
+		return updatedPages[i].URL < updatedPages[j].URL
+	})
+	_ = st.SavePages(site.Name, updatedPages)
+
 	if g.out != "" {
 		if err := os.WriteFile(g.out, []byte(resultStr), 0o644); err != nil {
 			fmt.Fprintf(stderr, "[GAGAL] Tulis file output %s: %v\n", g.out, err)
 			return 1
 		}
 		fmt.Fprintf(stdout, "\nLaporan performa tersimpan di: %s\n", g.out)
+	}
+
+	return 0
+}
+
+func gapCmd(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("gap", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	g := globalFlags(fs)
+	minImp := 50
+	fs.IntVar(&minImp, "min-imp", 50, "ambang minimum impresi untuk dianalisis gap")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 1
+	}
+
+	c, err := config.Load(g.config)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Muat config: %v\n", err)
+		return 1
+	}
+
+	site, err := resolveSite(c, g.site)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] %v\n", err)
+		return 1
+	}
+
+	st := store.NewStore(c.DataDir)
+	pages, err := st.LoadPages(site.Name)
+	if err != nil || len(pages) == 0 {
+		fmt.Fprintf(stderr, "[GAGAL] Data halaman belum tersedia untuk %s. Silakan jalankan 'crawl' dan 'perf' terlebih dahulu.\n", site.Name)
+		return 1
+	}
+
+	type GapDisplayItem struct {
+		model.QueryGap
+		URL string `json:"url"`
+	}
+
+	var allGaps []GapDisplayItem
+	analyzedQueries := 0
+
+	for _, p := range pages {
+		p.Gaps = nil
+		if p.Perf == nil || len(p.Perf.Queries) == 0 {
+			continue
+		}
+
+		for _, q := range p.Perf.Queries {
+			if q.Impressions < float64(minImp) {
+				continue
+			}
+			analyzedQueries++
+			gap := analyze.AnalyzeKeywordGap(q, p, c.Defaults.Stopwords, minImp)
+			p.Gaps = append(p.Gaps, gap)
+			allGaps = append(allGaps, GapDisplayItem{
+				QueryGap: gap,
+				URL:      p.URL,
+			})
+		}
+	}
+
+	// Urutkan peluang berdasarkan Opportunity Score descending
+	sort.Slice(allGaps, func(i, j int) bool {
+		return allGaps[i].Score > allGaps[j].Score
+	})
+
+	// Simpan gaps kembali ke store
+	_ = st.SavePages(site.Name, pages)
+
+	if g.format == "json" {
+		envelope := struct {
+			Schema         int              `json:"schema"`
+			Site           string           `json:"site"`
+			Timestamp      time.Time        `json:"timestamp"`
+			MinImpressions int              `json:"min_impressions"`
+			TotalGaps      int              `json:"total_gaps"`
+			Gaps           []GapDisplayItem `json:"gaps"`
+		}{
+			Schema:         1,
+			Site:           site.Name,
+			Timestamp:      time.Now().UTC(),
+			MinImpressions: minImp,
+			TotalGaps:      len(allGaps),
+			Gaps:           allGaps,
+		}
+
+		b, err := json.MarshalIndent(envelope, "", "  ")
+		if err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Marshal JSON: %v\n", err)
+			return 1
+		}
+
+		if g.out != "" {
+			if err := os.WriteFile(g.out, b, 0o644); err != nil {
+				fmt.Fprintf(stderr, "[GAGAL] Tulis file output %s: %v\n", g.out, err)
+				return 1
+			}
+			fmt.Fprintf(stdout, "Laporan gap JSON tersimpan di: %s\n", g.out)
+		} else {
+			fmt.Fprintln(stdout, string(b))
+		}
+		return 0
+	}
+
+	// Format text
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "=== ANALISIS KEYWORD GAP (%s) ===\n", site.Name)
+	fmt.Fprintf(&buf, "Ambang Min Impresi: %d | Kueri Dianalisis: %d | Total Peluang: %d\n\n",
+		minImp, analyzedQueries, len(allGaps))
+
+	if len(allGaps) == 0 {
+		fmt.Fprintf(&buf, "Tidak ditemukan peluang keyword gap dengan impresi >= %d.\n", minImp)
+	} else {
+		tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+		fmt.Fprintf(tw, "Kategori\tKata Kunci\tPosisi\tImp\tCTR\tMatch\tSkor\tURL\n")
+		for _, item := range allGaps {
+			badge := fmt.Sprintf("[%s]", item.Category)
+			fmt.Fprintf(tw, "%s\t%s\t%.1f\t%.0f\t%.1f%%\t%s\t%.1f\t%s\n",
+				badge,
+				item.Query,
+				item.Position,
+				item.Impressions,
+				item.CTR*100,
+				item.Match,
+				item.Score,
+				item.URL,
+			)
+		}
+		tw.Flush()
+	}
+
+	resultText := buf.String()
+	fmt.Fprint(stdout, resultText)
+
+	if g.out != "" {
+		if err := os.WriteFile(g.out, []byte(resultText), 0o644); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Tulis file output %s: %v\n", g.out, err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "\nLaporan gap tersimpan di: %s\n", g.out)
+	}
+
+	return 0
+}
+
+func reportCmd(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("report", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	g := globalFlags(fs)
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 1
+	}
+
+	c, err := config.Load(g.config)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] Muat config: %v\n", err)
+		return 1
+	}
+
+	site, err := resolveSite(c, g.site)
+	if err != nil {
+		fmt.Fprintf(stderr, "[GAGAL] %v\n", err)
+		return 1
+	}
+
+	st := store.NewStore(c.DataDir)
+	pages, err := st.LoadPages(site.Name)
+	if err != nil || len(pages) == 0 {
+		fmt.Fprintf(stderr, "[GAGAL] Data halaman belum tersedia untuk %s. Silakan jalankan 'crawl', 'inspect', atau 'perf' terlebih dahulu.\n", site.Name)
+		return 1
+	}
+
+	prevRun, _ := st.LoadLatestRun(site.Name)
+	currSummary := store.BuildRunSummary(site.Name, pages)
+	diff := report.ComputeDiff(pages, prevRun)
+
+	// Kumpulkan Top Gaps (maksimal 20)
+	var allGaps []model.QueryGap
+	for _, p := range pages {
+		allGaps = append(allGaps, p.Gaps...)
+	}
+	sort.Slice(allGaps, func(i, j int) bool {
+		return allGaps[i].Score > allGaps[j].Score
+	})
+	topGaps := allGaps
+	if len(topGaps) > 20 {
+		topGaps = topGaps[:20]
+	}
+
+	// Kumpulkan semua Audit Issues
+	var reportedIssues []report.ReportedIssue
+	for _, p := range pages {
+		for _, iss := range p.Audit {
+			reportedIssues = append(reportedIssues, report.ReportedIssue{
+				URL:      p.URL,
+				Code:     iss.Code,
+				Severity: iss.Severity,
+				Detail:   iss.Detail,
+			})
+		}
+	}
+
+	repData := &report.ReportData{
+		Site:        site.Name,
+		GSCProperty: site.GSCProperty,
+		Timestamp:   time.Now().UTC(),
+		Summary:     currSummary,
+		Diff:        diff,
+		TopGaps:     topGaps,
+		AuditIssues: reportedIssues,
+		Pages:       pages,
+	}
+
+	var outBuf bytes.Buffer
+	if g.format == "json" {
+		if err := report.RenderJSON(&outBuf, repData); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Render JSON: %v\n", err)
+			return 1
+		}
+	} else {
+		if err := report.RenderText(&outBuf, repData); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Render report: %v\n", err)
+			return 1
+		}
+	}
+
+	outputBytes := outBuf.Bytes()
+	fmt.Fprint(stdout, string(outputBytes))
+
+	// Simpan snapshot run summary ke history runs
+	if err := st.SaveRun(site.Name, currSummary); err != nil {
+		fmt.Fprintf(stderr, "[PERINGATAN] Gagal menyimpan run history: %v\n", err)
+	}
+
+	if g.out != "" {
+		if err := os.WriteFile(g.out, outputBytes, 0o644); err != nil {
+			fmt.Fprintf(stderr, "[GAGAL] Tulis file output %s: %v\n", g.out, err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "\nLaporan tersimpan di: %s\n", g.out)
 	}
 
 	return 0

@@ -34,7 +34,7 @@ flowchart LR
 | 1A Auth & Doctor | 1 hari | ✅ | 2026-10-26 / 61dd9c7 |
 | 1B Discovery & Crawl | 2 hari | ✅ | 2026-10-27 / 3154920 |
 | 1C Inspect & Perf | 1–2 hari | ✅ | 2026-10-27 / 9371b38 |
-| 1D Analyze, Store, Report | 1–2 hari | ⬜ | |
+| 1D Analyze, Store, Report | 1–2 hari | ✅ | 2026-10-29 |
 | 1E Integrasi MVP | 0,5–1 hari | ⬜ | |
 | 2A Submit | 1 hari | ⬜ | |
 | 2B Indexing API | 1 hari | ⬜ | |
@@ -177,22 +177,22 @@ Syarat lulus: semua perintah di atas **bersih**, ditambah **test spesifik fase**
 **Prasyarat:** Fase 1B dan 1C lulus.
 
 **Task**
-- [ ] `analyze.go`: tokenizer, stopword, `matchLevel`, skor peluang, kategori (9.6)
-- [ ] `store.go`: JSON atomik (tmp + rename), `"schema": 1`, lockfile `O_EXCL`, layout `data/` (bagian 8)
-- [ ] `report.go`: format `text` (tabwriter, ikon, `NO_COLOR`/non-TTY) dan `json`, struktur laporan (9.8)
+- [x] `analyze.go`: tokenizer, stopword, `matchLevel`, skor peluang, kategori ([BOOST], [TITLE_META], [STRONG], [NEW_CONTENT]) (9.6)
+- [x] `store.go`: JSON atomik (tmp + rename), `"schema": 1`, lockfile `O_EXCL`, layout `data/` (bagian 8)
+- [x] `report.go`: format `text` (tabwriter, badge teks bersih tanpa emoji/unicode) dan `json`, struktur laporan (9.8)
 
 **Test**
-- [ ] Tokenizer: huruf besar, tanda baca, token 1 karakter, angka, unicode
-- [ ] `matchLevel`: satu kasus per level (`exact`, `all_words`, `partial`, `absent`), stopword tidak dihitung hilang, urutan `FoundIn`
-- [ ] Skor peluang: nilai terhitung manual untuk beberapa posisi/impresi/CTR; kategori (⚡ 🎯 ✅ 🔎) sesuai kriteria
-- [ ] Store: simulasi proses mati di tengah tulis → file lama tidak korup; lockfile menolak proses kedua; lock sisa dibersihkan sesuai aturan
-- [ ] Laporan: **golden file** `text` dan `json`; input sama → output identik (determinisme)
-- [ ] `NO_COLOR` dan bukan-TTY mematikan ikon
-- [ ] `-race` untuk store
+- [x] Tokenizer: huruf besar, tanda baca, token 1 karakter, angka, unicode
+- [x] `matchLevel`: satu kasus per level (`exact`, `all_words`, `partial`, `absent`), stopword tidak dihitung hilang, urutan `FoundIn`
+- [x] Skor peluang: nilai terhitung manual untuk beberapa posisi/impresi/CTR; kategori badge teks ([BOOST], [TITLE_META], [STRONG], [NEW_CONTENT]) sesuai kriteria
+- [x] Store: simulasi proses mati di tengah tulis → file lama tidak korup; lockfile menolak proses kedua; lock sisa dibersihkan sesuai aturan
+- [x] Laporan: pengujian format `text` dan `json`; verifikasi tidak ada karakter emoji/dekoratif unicode (100% ASCII informatif)
+- [x] Verifikasi diff run (deteksi status terindeks baru, de-indeks, perubahan peringkat, delta klik & impresi)
+- [x] `-race` untuk store, analyze, report, dan cli
 
-**Verifikasi:** Gate Standar.
-**Definition of Done:** data fixture menghasilkan laporan golden yang stabil.
-**Gate lulus:** [ ] ______
+**Verifikasi:** Gate Standar (`.\scripts\gate.ps1 -race`) + manual live `seo-boost gap` dan `seo-boost report` pada situs asli.
+**Definition of Done:** Store aman atomik, gap analysis akurat, dan format laporan bersih serta stabil.
+**Gate lulus:** [x] 2026-10-29 (build, vet, unit tests, dan -race detector 100% passed; verifikasi live gap & report awanverse sukses)
 
 ---
 

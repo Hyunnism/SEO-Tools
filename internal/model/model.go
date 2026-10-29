@@ -98,13 +98,24 @@ type PagePerf struct {
 	Queries     []QueryPerf `json:"queries"`
 }
 
+// GapCategory mewakili kategori tindakan untuk keyword gap.
+type GapCategory string
+
+const (
+	CategoryLowHangingFruit GapCategory = "BOOST"       // Posisi 5-20, imp tinggi, match != exact
+	CategoryTitleMetaFix    GapCategory = "TITLE_META"  // Posisi <= 10, CTR jauh di bawah expected
+	CategoryAlreadyStrong   GapCategory = "STRONG"      // Posisi <= 10, match == exact
+	CategoryContentMissing  GapCategory = "NEW_CONTENT" // Absent, imp tinggi
+)
+
 // QueryGap menyimpan analisis kata kunci Google vs teks halaman.
 type QueryGap struct {
 	QueryPerf
-	Match      MatchLevel `json:"match"`
-	FoundIn    []string   `json:"found_in"` // title, h1, h2h3, meta, body, url, alt
-	MissingTok []string   `json:"missing_tokens"`
-	Score      float64    `json:"opportunity_score"`
+	Match      MatchLevel  `json:"match"`
+	FoundIn    []string    `json:"found_in"` // title, h1, h2h3, meta, body, url, alt
+	MissingTok []string    `json:"missing_tokens"`
+	Score      float64     `json:"opportunity_score"`
+	Category   GapCategory `json:"category,omitempty"`
 }
 
 // Page adalah data gabungan lengkap untuk satu URL.
@@ -118,4 +129,27 @@ type Page struct {
 	Perf       *PagePerf    `json:"perf,omitempty"`
 	Gaps       []QueryGap   `json:"gaps,omitempty"`
 	Audit      []AuditIssue `json:"audit,omitempty"`
+}
+
+// PageStub menyimpan ringkasan status halaman untuk perbandingan run (diff).
+type PageStub struct {
+	Status   IndexStatus `json:"status"`
+	Position float64     `json:"position"`
+	Clicks   float64     `json:"clicks"`
+	Page1    bool        `json:"page1"`
+}
+
+// RunSummary menyimpan snapshot ringkasan suatu run untuk riwayat dan perbandingan diff.
+type RunSummary struct {
+	Schema           int                 `json:"schema"`
+	Site             string              `json:"site"`
+	Timestamp        time.Time           `json:"timestamp"`
+	TotalPages       int                 `json:"total_pages"`
+	IndexedCount     int                 `json:"indexed_count"`
+	TroubledCount    int                 `json:"troubled_count"`
+	Page1Count       int                 `json:"page1_count"`
+	TotalClicks      float64             `json:"total_clicks"`
+	TotalImpressions float64             `json:"total_impressions"`
+	AveragePosition  float64             `json:"average_position"`
+	PageSummaries    map[string]PageStub `json:"page_summaries"`
 }
