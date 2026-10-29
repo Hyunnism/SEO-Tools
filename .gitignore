@@ -3,3 +3,4 @@ data/
 config.json
 *.exe
 dist/
+docs/
