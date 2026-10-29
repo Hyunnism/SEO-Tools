@@ -45,3 +45,4 @@ func HasCriticalIssues(pages []*model.Page, issues []ReportedIssue, priorityPath
 
 	return false
 }
+
